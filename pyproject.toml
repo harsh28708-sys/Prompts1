@@ -1,0 +1,24 @@
+[project]
+name = "promteval"
+version = "0.1.0"
+description = "Runs prompt variants against multiple LLMs and grades the results with a judge LLM."
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0",
+    "litellm",
+    "python-dotenv",
+    "tenacity",
+]
+
+[project.optional-dependencies]
+dev = ["ruff", "pytest"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.setuptools]
+packages = ["promteval"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
