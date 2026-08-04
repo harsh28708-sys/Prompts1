@@ -43,7 +43,7 @@ class LLMCallResult(Strict):
 
 
 class JudgeResult(Strict):
-    score: int = Field(ge=1, le=5)
+    score: int = Field(ge=0, le=5)  # 0 = execution failed or judge response unparseable
     reasoning: str
     call_id: str  # links back to the LLMCallResult it graded
 

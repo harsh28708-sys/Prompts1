@@ -74,6 +74,15 @@ def test_judge_result_rejects_out_of_range_score():
         JudgeResult(score=6, reasoning="bad", call_id="v1:tc1:gemini")
 
 
+def test_judge_result_allows_zero_for_failure_cases():
+    # Per Plan.md: score=0 marks an execution failure or unparseable judge response.
+    jr = JudgeResult(score=0, reasoning="judge parse failure", call_id="v1:tc1:gemini")
+    assert jr.score == 0
+
+    with pytest.raises(ValidationError):
+        JudgeResult(score=-1, reasoning="bad", call_id="v1:tc1:gemini")
+
+
 def test_variant_score_sample():
     vs = VariantScore(
         variant_id="v1",
