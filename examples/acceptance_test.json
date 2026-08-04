@@ -1,0 +1,29 @@
+{
+  "task_name": "Summarize support tickets",
+  "models": ["groq/llama-3.3-70b-versatile"],
+  "prompt_variants": [
+    {
+      "id": "v1",
+      "name": "Direct",
+      "template": "Summarize this customer message in one sentence: {customer_message}"
+    },
+    {
+      "id": "v2",
+      "name": "Structured",
+      "template": "You are a support triage assistant. Read the message below and output a one-sentence summary plus an urgency level (low/medium/high).\n\nMessage: {customer_message}"
+    },
+    {
+      "id": "v3",
+      "name": "Concise-with-example",
+      "template": "Summarize in under 10 words.\nExample: 'Late delivery, wants refund.'\n\nMessage: {customer_message}"
+    }
+  ],
+  "test_cases": [
+    { "id": "tc1", "variables": { "customer_message": "My order #4521 was supposed to arrive yesterday and it's still not here. This is the second time this has happened." } },
+    { "id": "tc2", "variables": { "customer_message": "I was charged twice for the same order, can someone please refund the duplicate charge?" } },
+    { "id": "tc3", "variables": { "customer_message": "The product arrived damaged, the box was crushed and the item inside is cracked." } },
+    { "id": "tc4", "variables": { "customer_message": "Just wanted to say the delivery was super fast this time, thanks!" } },
+    { "id": "tc5", "variables": { "customer_message": "I can't log into my account, it keeps saying my password is incorrect even after I reset it." } }
+  ],
+  "judge_criteria": "Score 1-5. A 5 means the summary is accurate, captures the core issue, and is no longer than necessary. Deduct points for missing the customer's actual problem, adding information not in the message, or being unnecessarily long."
+}
