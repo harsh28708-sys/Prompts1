@@ -86,10 +86,14 @@ async def execute_matrix(
     models: list[str],
     concurrency: int = DEFAULT_CONCURRENCY,
     timeout: float = DEFAULT_TIMEOUT_S,
+    semaphore: asyncio.Semaphore | None = None,
 ) -> list[LLMCallResult]:
     """Fire every (rendered prompt) x model combination concurrently, at most
-    `concurrency` calls in flight at once."""
-    semaphore = asyncio.Semaphore(concurrency)
+    `concurrency` calls in flight at once. Pass an externally-created `semaphore`
+    (e.g. shared with judge calls, per Plan.md) to bound execution and judging
+    together instead of judge calls firing unthrottled on top of this."""
+    if semaphore is None:
+        semaphore = asyncio.Semaphore(concurrency)
     calls = [
         execute_call(rp.variant_id, rp.test_case_id, model, rp.prompt, semaphore, timeout)
         for rp in rendered_prompts

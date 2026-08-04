@@ -13,6 +13,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["ruff", "pytest", "pytest-asyncio"]
 
+[project.scripts]
+prompteval = "promteval.cli:main"
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 

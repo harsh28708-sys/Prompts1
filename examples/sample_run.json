@@ -1,9 +1,8 @@
 {
   "task_name": "Summarize support tickets",
   "models": [
-    "openrouter/meta-llama/llama-3.3-70b",
-    "gemini/gemini-2.5-flash",
-    "groq/llama-3.3-70b-versatile"
+    "groq/llama-3.3-70b-versatile",
+    "openrouter/nvidia/nemotron-nano-9b-v2:free"
   ],
   "prompt_variants": [
     {

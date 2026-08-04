@@ -26,6 +26,8 @@ def make_report() -> RunReport:
 
 
 def test_format_table_includes_winner_and_rationale():
+    # In plain terms: the printed results should actually show the task name,
+    # both options, and the reason for the winner -- not just blank or partial.
     table = format_table(make_report())
 
     assert "Summarize support tickets" in table
@@ -36,6 +38,8 @@ def test_format_table_includes_winner_and_rationale():
 
 
 def test_format_table_marks_only_the_winner_row():
+    # In plain terms: exactly one row should get marked as the winner -- not
+    # zero, not two -- and it must be the top-ranked row.
     table = format_table(make_report())
     lines_with_marker = [line for line in table.splitlines() if "<- winner" in line]
 
@@ -44,6 +48,8 @@ def test_format_table_marks_only_the_winner_row():
 
 
 def test_format_markdown_uses_table_syntax_and_bolds_winner():
+    # In plain terms: the saved Markdown version should also look like a real
+    # table, with the winner clearly highlighted.
     md = format_markdown(make_report())
 
     assert "| Rank | Variant |" in md
@@ -52,6 +58,8 @@ def test_format_markdown_uses_table_syntax_and_bolds_winner():
 
 
 def test_write_json_report_round_trips(tmp_path):
+    # In plain terms: saving the results to a file and opening that file back up
+    # later should give back the exact same information -- nothing lost or corrupted.
     report = make_report()
     path = write_json_report(report, output_dir=tmp_path)
 
@@ -65,6 +73,8 @@ def test_write_json_report_round_trips(tmp_path):
 
 
 def test_write_markdown_report_creates_a_real_file(tmp_path):
+    # In plain terms: the Markdown file should actually get created on disk,
+    # with the right content in it -- not just exist "in theory".
     path = write_markdown_report(make_report(), output_dir=tmp_path)
 
     assert path.exists()

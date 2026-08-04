@@ -51,6 +51,8 @@ def make_judge(call: LLMCallResult, score: int) -> JudgeResult:
 
 
 def test_aggregate_no_cost_redistributes_weights():
+    # In plain terms: without knowing prices, a variant with much better answers
+    # should still win overall, even if a worse, faster variant is quicker.
     # v1: quality [4, 5] -> avg 4.5, latency [100, 200] -> avg 150
     # v2: quality [2, 3] -> avg 2.5, latency [50, 50]  -> avg 50
     # max_latency = 150 -> latency_score: v1=0.0, v2=1-50/150=0.6667
@@ -79,6 +81,8 @@ def test_aggregate_no_cost_redistributes_weights():
 
 
 def test_aggregate_with_known_cost_uses_full_formula():
+    # In plain terms: when we DO know the price, a cheaper option should get a
+    # real, measurable boost in the ranking, not just quality and speed mattering.
     # Both variants have known cost -> full 0.60/0.25/0.15 formula applies.
     run = make_run([("v1", "Cheap"), ("v2", "Pricey")], n_test_cases=1)
     c1 = make_call("v1", "tc1", latency_ms=100, cost_usd=0.001)
@@ -99,6 +103,8 @@ def test_aggregate_with_known_cost_uses_full_formula():
 
 
 def test_missing_judge_result_counts_as_zero_quality():
+    # In plain terms: an answer nobody ever graded should count as a failure (0),
+    # not get quietly left out as if it never happened.
     # Defensive path: a raw result with no matching JudgeResult at all (not just a
     # failed call) must still be treated as quality=0, not silently skipped.
     run = make_run([("v1", "Solo")], n_test_cases=1)
@@ -110,6 +116,8 @@ def test_missing_judge_result_counts_as_zero_quality():
 
 
 def test_rank_tie_break_prefers_higher_quality_on_equal_weighted_score():
+    # In plain terms: if two options end up in a dead-even tie, the one with the
+    # better answers should be declared the winner of the tiebreaker.
     a = VariantScore(variant_id="a", avg_quality=4.0, avg_latency_ms=100, weighted_score=3.0)
     b = VariantScore(variant_id="b", avg_quality=3.6667, avg_latency_ms=0, weighted_score=3.0)
 
@@ -119,6 +127,7 @@ def test_rank_tie_break_prefers_higher_quality_on_equal_weighted_score():
 
 
 def test_rank_tie_break_prefers_lower_latency_when_quality_also_ties():
+    # In plain terms: if it's STILL a tie after that, the faster option should win.
     a = VariantScore(variant_id="a", avg_quality=4.0, avg_latency_ms=200, weighted_score=3.0)
     b = VariantScore(variant_id="b", avg_quality=4.0, avg_latency_ms=100, weighted_score=3.0)
 
@@ -128,6 +137,8 @@ def test_rank_tie_break_prefers_lower_latency_when_quality_also_ties():
 
 
 def test_recommendation_names_quality_as_the_losing_dimension():
+    # In plain terms: the "why this one lost" explanation should actually make
+    # sense and show real numbers, not just say "it was worse" with no detail.
     run = make_run([("v1", "Good"), ("v2", "Bad")], n_test_cases=1)
     winner = VariantScore(variant_id="v1", avg_quality=4.5, avg_latency_ms=100, weighted_score=3.375)
     loser = VariantScore(variant_id="v2", avg_quality=2.0, avg_latency_ms=100, weighted_score=1.5)
@@ -142,6 +153,8 @@ def test_recommendation_names_quality_as_the_losing_dimension():
 
 
 def test_recommendation_with_single_variant_has_no_loser_lines():
+    # In plain terms: with only one option to begin with, the report shouldn't
+    # awkwardly talk about other options "losing" when there weren't any.
     run = make_run([("v1", "Only")], n_test_cases=1)
     winner = VariantScore(variant_id="v1", avg_quality=4.0, avg_latency_ms=100, weighted_score=3.0)
 
@@ -152,6 +165,8 @@ def test_recommendation_with_single_variant_has_no_loser_lines():
 
 
 def test_build_run_report_end_to_end_with_a_forced_failure():
+    # In plain terms: if one AI call totally fails, you should still get a
+    # complete, usable report at the end instead of the whole thing crashing.
     # One call fails outright -- proves the whole PBI-6 pipeline still produces a
     # complete RunReport instead of crashing on a partial batch (echoes PBI-3's DoD).
     run = make_run([("v1", "Direct")], n_test_cases=2)

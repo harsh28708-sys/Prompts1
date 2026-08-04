@@ -1,5 +1,6 @@
 """T4.4: judge engine tests with mocked judge responses (no real API calls)."""
 
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -31,7 +32,7 @@ async def test_execution_failure_skips_judge_call(monkeypatch):
     monkeypatch.setattr(judge_module.litellm, "acompletion", mock_acompletion)
 
     result = make_call_result(output=None, error="timeout after 3 retries")
-    jr = await judge_call_result(result, judge_criteria="Score 1-5.", judge_model=JUDGE_MODEL)
+    jr = await judge_call_result(result, "Score 1-5.", JUDGE_MODEL, asyncio.Semaphore(1))
 
     assert jr.score == 0
     assert "timeout after 3 retries" in jr.reasoning
@@ -45,7 +46,7 @@ async def test_valid_json_response(monkeypatch):
     monkeypatch.setattr(judge_module.litellm, "acompletion", mock_acompletion)
 
     result = make_call_result()
-    jr = await judge_call_result(result, judge_criteria="Score 1-5.", judge_model=JUDGE_MODEL)
+    jr = await judge_call_result(result, "Score 1-5.", JUDGE_MODEL, asyncio.Semaphore(1))
 
     assert jr.score == 4
     assert jr.reasoning == "Accurate and concise."
@@ -58,7 +59,7 @@ async def test_markdown_wrapped_json_response(monkeypatch):
     monkeypatch.setattr(judge_module.litellm, "acompletion", AsyncMock(return_value=fake_response(wrapped)))
 
     result = make_call_result()
-    jr = await judge_call_result(result, judge_criteria="Score 1-5.", judge_model=JUDGE_MODEL)
+    jr = await judge_call_result(result, "Score 1-5.", JUDGE_MODEL, asyncio.Semaphore(1))
 
     assert jr.score == 3
     assert jr.reasoning == "Missed the sentiment."
@@ -74,7 +75,7 @@ async def test_malformed_json_retries_once_then_succeeds(monkeypatch):
     monkeypatch.setattr(judge_module.litellm, "acompletion", mock_acompletion)
 
     result = make_call_result()
-    jr = await judge_call_result(result, judge_criteria="Score 1-5.", judge_model=JUDGE_MODEL)
+    jr = await judge_call_result(result, "Score 1-5.", JUDGE_MODEL, asyncio.Semaphore(1))
 
     assert jr.score == 2
     assert mock_acompletion.await_count == 2  # 1 initial attempt + 1 retry
@@ -85,7 +86,7 @@ async def test_malformed_json_both_attempts_falls_back_to_zero(monkeypatch):
     monkeypatch.setattr(judge_module.litellm, "acompletion", mock_acompletion)
 
     result = make_call_result()
-    jr = await judge_call_result(result, judge_criteria="Score 1-5.", judge_model=JUDGE_MODEL)
+    jr = await judge_call_result(result, "Score 1-5.", JUDGE_MODEL, asyncio.Semaphore(1))
 
     assert jr.score == 0
     assert jr.reasoning == "judge parse failure"
@@ -99,7 +100,23 @@ async def test_out_of_range_score_treated_as_unparseable(monkeypatch):
     monkeypatch.setattr(judge_module.litellm, "acompletion", mock_acompletion)
 
     result = make_call_result()
-    jr = await judge_call_result(result, judge_criteria="Score 1-5.", judge_model=JUDGE_MODEL)
+    jr = await judge_call_result(result, "Score 1-5.", JUDGE_MODEL, asyncio.Semaphore(1))
 
     assert jr.score == 0
     assert jr.reasoning == "judge parse failure"
+
+
+async def test_judge_call_exception_falls_back_to_zero_instead_of_crashing(monkeypatch):
+    # In plain terms: this is the bug found by a real run hitting Groq's rate limit --
+    # a network/API error from the judge call itself (not a malformed response) must
+    # never escape and crash the whole CLI. It should retry once, then give up cleanly.
+    mock_acompletion = AsyncMock(side_effect=RuntimeError("429 Too Many Requests"))
+    monkeypatch.setattr(judge_module.litellm, "acompletion", mock_acompletion)
+
+    result = make_call_result()
+    jr = await judge_call_result(result, "Score 1-5.", JUDGE_MODEL, asyncio.Semaphore(1))
+
+    assert jr.score == 0
+    assert "judge call failed" in jr.reasoning
+    assert "429 Too Many Requests" in jr.reasoning
+    assert mock_acompletion.await_count == 2  # 1 initial attempt + 1 retry, then gives up
