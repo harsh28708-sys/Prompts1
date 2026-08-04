@@ -12,12 +12,18 @@ from dotenv import load_dotenv
 from pydantic import ValidationError
 
 from promteval.executor import DEFAULT_CONCURRENCY, DEFAULT_TIMEOUT_S, execute_matrix
+from promteval.generator import GenerationError
 from promteval.judge import judge_call_result
 from promteval.renderer import TemplateRenderError, render_matrix
-from promteval.reporter import format_table, write_json_report, write_markdown_report
+from promteval.reporter import (
+    format_table,
+    safe_filename_stub,
+    write_json_report,
+    write_markdown_report,
+)
 from promteval.schemas import EvalRun, RunReport
 from promteval.scoring import build_run_report
-from promteval.wizard import run_init_wizard
+from promteval.wizard import DEFAULT_MODEL, run_init_wizard, run_quickstart_wizard
 
 DEFAULT_JUDGE_MODEL = "gemini/gemini-2.0-flash"
 
@@ -51,6 +57,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="Where to save the input file (default: <task_name>.json).",
     )
 
+    quickstart_parser = subparsers.add_parser(
+        "quickstart",
+        help="AI generates a task + 5 test cases (or use your own task); you write 3 prompts; runs immediately.",
+    )
+    quickstart_parser.add_argument(
+        "--model", default=DEFAULT_MODEL,
+        help=f"Model used to generate the task/test cases, run the prompts, and judge them (default: {DEFAULT_MODEL}).",
+    )
+    quickstart_parser.add_argument(
+        "--judge-model", default=None,
+        help="Model used to judge outputs (default: same as --model).",
+    )
+    quickstart_parser.add_argument(
+        "--concurrency", type=int, default=DEFAULT_CONCURRENCY,
+        help=f"Max concurrent LLM calls (default: {DEFAULT_CONCURRENCY}).",
+    )
+    quickstart_parser.add_argument(
+        "--timeout", type=float, default=DEFAULT_TIMEOUT_S,
+        help=f"Per-call timeout in seconds (default: {DEFAULT_TIMEOUT_S}).",
+    )
+
     return parser
 
 
@@ -73,10 +100,33 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "init":
         run = run_init_wizard()
-        output_path = Path(args.output_file) if args.output_file else Path(f"{run.task_name.replace(' ', '_')}.json")
+        output_path = Path(args.output_file) if args.output_file else Path(f"{safe_filename_stub(run.task_name)}.json")
         output_path.write_text(json.dumps(run.model_dump(), indent=2), encoding="utf-8")
         print(f"\nSaved to: {output_path}")
         print(f"Run it with: prompteval run {output_path}")
+        return 0
+
+    if args.command == "quickstart":
+        try:
+            run = asyncio.run(run_quickstart_wizard(args.model))
+        except GenerationError as exc:
+            print(f"\nError: {exc}", file=sys.stderr)
+            return 1
+
+        input_path = Path(f"{safe_filename_stub(run.task_name)}.json")
+        input_path.write_text(json.dumps(run.model_dump(), indent=2), encoding="utf-8")
+        print(f"\nSaved input file to: {input_path} (re-run it later with `prompteval run {input_path}`)\n")
+
+        judge_model = args.judge_model or args.model
+        try:
+            report = asyncio.run(run_pipeline(run, judge_model, args.concurrency, args.timeout))
+        except TemplateRenderError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+
+        print(format_table(report))
+        report_path = write_json_report(report)
+        print(f"\nReport written to: {report_path}")
         return 0
 
     if args.command != "run":

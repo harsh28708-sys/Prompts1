@@ -6,8 +6,10 @@ from unittest.mock import AsyncMock
 
 import litellm
 
+import promteval.cli as cli_module
 from promteval.cli import DEFAULT_JUDGE_MODEL, build_parser, main
 from promteval.executor import DEFAULT_CONCURRENCY, DEFAULT_TIMEOUT_S
+from promteval.generator import GenerationError
 from promteval.schemas import EvalRun
 
 SAMPLE_INPUT = {
@@ -123,3 +125,41 @@ def test_main_init_writes_a_file_that_run_can_actually_load(tmp_path, monkeypatc
     assert saved["task_name"] == "Wizard test"
     assert saved["prompt_variants"][0]["template"] == "Summarize: {msg}"
     EvalRun(**saved)  # doesn't raise -- proves `prompteval run` could load this file
+
+
+def test_main_quickstart_runs_immediately_without_a_separate_run_command(tmp_path, monkeypatch, capsys):
+    # In plain terms: quickstart shouldn't require running `prompteval run`
+    # afterward -- one command should generate, ask, and evaluate immediately.
+    canned_run = EvalRun(
+        task_name="Quickstart demo",
+        models=["groq/llama-3.3-70b-versatile"],
+        prompt_variants=[{"id": "v1", "name": "Prompt 1", "template": "Summarize: {input}"}],
+        test_cases=[{"id": "tc1", "variables": {"input": "hello"}}],
+        judge_criteria="n/a",
+    )
+    monkeypatch.setattr(cli_module, "run_quickstart_wizard", AsyncMock(return_value=canned_run))
+    monkeypatch.setattr(litellm, "acompletion", AsyncMock(return_value=fake_llm_response('{"score": 4, "reasoning": "fine"}')))
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = main(["quickstart"])
+
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert "Saved input file to:" in out
+    assert "Recommended:" in out
+    assert "Report written to:" in out
+
+    # Both the reusable input file AND the report should exist.
+    assert (tmp_path / "Quickstart_demo.json").exists()
+    assert list(tmp_path.glob("Quickstart_demo_*.json"))  # the timestamped report
+
+
+def test_main_quickstart_reports_generation_failure_cleanly(monkeypatch, capsys):
+    # In plain terms: if the AI generation step fails (bad network, bad response),
+    # quickstart should print a clear error and exit, not crash with a traceback.
+    monkeypatch.setattr(cli_module, "run_quickstart_wizard", AsyncMock(side_effect=GenerationError("model unavailable")))
+
+    exit_code = main(["quickstart"])
+
+    assert exit_code == 1
+    assert "model unavailable" in capsys.readouterr().err

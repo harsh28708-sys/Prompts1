@@ -69,6 +69,31 @@ An input file is a JSON object with five fields:
 
 See [`examples/sample_run.json`](examples/sample_run.json) for a full working example.
 
+You don't have to hand-write this file — see the two commands below that build it
+(or skip it entirely) for you.
+
+## Don't want to write a JSON file by hand?
+
+**`prompteval init`** — asks you everything in the terminal (task name, prompt
+variants, test cases, rubric) and saves it as a real input file you can run or edit later:
+
+```bash
+prompteval init my_task.json
+prompteval run my_task.json --judge-model groq/llama-3.3-70b-versatile
+```
+
+**`prompteval quickstart`** — the fastest way to try the tool. AI generates a task
+(or you can type your own) plus 5 realistic test cases, you just type your 3 prompts,
+and it evaluates immediately — no file, no second command:
+
+```bash
+prompteval quickstart --judge-model groq/llama-3.3-70b-versatile
+```
+
+Your 3 prompts should use `{input}` as the placeholder — that's the fixed variable
+name the AI-generated test cases fill in. It still saves a copy of the generated
+input file afterward, so you can re-run the exact same test later with `prompteval run`.
+
 ## Run it
 
 ```bash

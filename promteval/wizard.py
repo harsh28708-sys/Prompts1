@@ -1,13 +1,18 @@
-"""Interactive `prompteval init` flow: asks for the task, prompt variants, test
-cases, and rubric in the terminal, then builds a real EvalRun from the answers.
+"""Interactive `prompteval init`/`quickstart` flows: ask for the task, prompt
+variants, test cases, and rubric in the terminal, then build a real EvalRun.
 """
 
 import re
 
+from promteval.generator import generate_random_task, generate_test_cases
 from promteval.schemas import EvalRun, PromptVariant, TestCase
 
 DEFAULT_MODEL = "groq/llama-3.3-70b-versatile"
 DEFAULT_JUDGE_CRITERIA = "Score 1-5 on accuracy, clarity, and completeness."
+
+# `quickstart` fixes the placeholder name so AI-generated test cases can be slotted
+# into whatever 3 prompts the user writes, without needing to infer it after the fact.
+QUICKSTART_VARIABLE = "input"
 
 _VARIABLE_RE = re.compile(r"\{(\w+)\}")
 
@@ -77,6 +82,51 @@ def run_init_wizard() -> EvalRun:
         "\nJudge rubric (what makes a 5/5 answer?)", default=DEFAULT_JUDGE_CRITERIA
     )
     model = _prompt("Model to run prompts against (provider/model-name)", default=DEFAULT_MODEL)
+
+    return EvalRun(
+        task_name=task_name,
+        models=[model],
+        prompt_variants=variants,
+        test_cases=test_cases,
+        judge_criteria=judge_criteria,
+    )
+
+
+async def run_quickstart_wizard(model: str) -> EvalRun:
+    """AI generates the task (or uses one you type) and 5 test cases; you write 3
+    prompts against them; the caller runs the evaluation immediately afterward."""
+    print("Let's set up a quick evaluation with AI-generated test data.\n")
+
+    task_input = input("What task do you want to test? (press Enter for a random AI-generated task): ").strip()
+    if task_input:
+        task_name = task_input
+    else:
+        print("\nThinking of a random task...")
+        task_name = await generate_random_task(model)
+        print(f"Task: {task_name}")
+
+    print(f"\nGenerating 5 test cases for '{task_name}'...")
+    test_case_values = await generate_test_cases(task_name, model, n=5)
+    print("Generated test cases:")
+    for i, value in enumerate(test_case_values, start=1):
+        print(f"  {i}. {value}")
+
+    placeholder = "{" + QUICKSTART_VARIABLE + "}"
+    print(f"\nNow enter your 3 prompts to test. Use {placeholder} where the test data goes.\n")
+
+    variants: list[PromptVariant] = []
+    for i in range(1, 4):
+        template = _prompt(f"Prompt {i} template")
+        if placeholder not in template:
+            print(f"  Warning: this template doesn't include {placeholder} -- it won't see the test data.")
+        variants.append(PromptVariant(id=f"v{i}", name=f"Prompt {i}", template=template))
+
+    test_cases = [
+        TestCase(id=f"tc{i}", variables={QUICKSTART_VARIABLE: value})
+        for i, value in enumerate(test_case_values, start=1)
+    ]
+
+    judge_criteria = _prompt("\nJudge rubric (what makes a 5/5 answer?)", default=DEFAULT_JUDGE_CRITERIA)
 
     return EvalRun(
         task_name=task_name,

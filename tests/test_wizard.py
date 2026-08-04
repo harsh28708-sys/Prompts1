@@ -1,7 +1,13 @@
-"""Tests for the interactive `prompteval init` wizard. input() is mocked with a
-scripted list of answers, in the exact order the wizard asks its questions."""
+"""Tests for the interactive `prompteval init`/`quickstart` wizards. input() is
+mocked with a scripted list of answers, in the exact order the wizard asks its
+questions. Quickstart's own AI-generation calls (generate_random_task /
+generate_test_cases) are mocked directly rather than mocking litellm -- those
+functions get their own dedicated tests in test_generator.py."""
 
-from promteval.wizard import _prompt, _prompt_yes_no, run_init_wizard
+from unittest.mock import AsyncMock
+
+import promteval.wizard as wizard_module
+from promteval.wizard import _prompt, _prompt_yes_no, run_init_wizard, run_quickstart_wizard
 
 
 def scripted_input(monkeypatch, answers: list[str]):
@@ -60,3 +66,71 @@ def test_run_init_wizard_builds_a_valid_eval_run(monkeypatch):
     assert run.test_cases[0].variables == {"msg": "Hello world"}
     assert run.models == ["groq/llama-3.3-70b-versatile"]
     assert "accuracy" in run.judge_criteria
+
+
+GENERATED_TEST_CASES = ["case one", "case two", "case three", "case four", "case five"]
+
+
+async def test_quickstart_uses_typed_task_and_skips_random_generation(monkeypatch):
+    generate_task_mock = AsyncMock()
+    monkeypatch.setattr(wizard_module, "generate_random_task", generate_task_mock)
+    monkeypatch.setattr(wizard_module, "generate_test_cases", AsyncMock(return_value=GENERATED_TEST_CASES))
+
+    answers = [
+        "My own task",                     # task typed directly -> skips generation
+        "Summarize: {input}", "Explain: {input}", "TL;DR: {input}",  # 3 prompts
+        "",                                 # judge rubric -> default
+    ]
+    scripted_input(monkeypatch, answers)
+
+    run = await run_quickstart_wizard("groq/llama-3.3-70b-versatile")
+
+    assert run.task_name == "My own task"
+    generate_task_mock.assert_not_called()
+
+
+async def test_quickstart_generates_a_random_task_when_left_blank(monkeypatch):
+    monkeypatch.setattr(wizard_module, "generate_random_task", AsyncMock(return_value="AI-picked task"))
+    monkeypatch.setattr(wizard_module, "generate_test_cases", AsyncMock(return_value=GENERATED_TEST_CASES))
+
+    answers = [
+        "",                                 # blank task -> triggers random generation
+        "Summarize: {input}", "Explain: {input}", "TL;DR: {input}",
+        "",
+    ]
+    scripted_input(monkeypatch, answers)
+
+    run = await run_quickstart_wizard("groq/llama-3.3-70b-versatile")
+
+    assert run.task_name == "AI-picked task"
+
+
+async def test_quickstart_builds_3_variants_and_5_test_cases_using_input_placeholder(monkeypatch):
+    monkeypatch.setattr(wizard_module, "generate_random_task", AsyncMock(return_value="Some task"))
+    monkeypatch.setattr(wizard_module, "generate_test_cases", AsyncMock(return_value=GENERATED_TEST_CASES))
+
+    answers = ["", "Summarize: {input}", "Explain: {input}", "TL;DR: {input}", ""]
+    scripted_input(monkeypatch, answers)
+
+    run = await run_quickstart_wizard("groq/llama-3.3-70b-versatile")
+
+    assert len(run.prompt_variants) == 3
+    assert len(run.test_cases) == 5
+    assert [tc.variables["input"] for tc in run.test_cases] == GENERATED_TEST_CASES
+    # every variant's template must actually use the placeholder the test cases fill
+    assert all("{input}" in v.template for v in run.prompt_variants)
+
+
+async def test_quickstart_warns_but_does_not_fail_when_placeholder_missing(monkeypatch, capsys):
+    # In plain terms: forgetting to include {input} in a prompt shouldn't crash the
+    # wizard -- it's still a valid (if pointless) prompt -- but the user should be warned.
+    monkeypatch.setattr(wizard_module, "generate_random_task", AsyncMock(return_value="Some task"))
+    monkeypatch.setattr(wizard_module, "generate_test_cases", AsyncMock(return_value=GENERATED_TEST_CASES))
+
+    answers = ["", "This prompt forgot the placeholder", "Explain: {input}", "TL;DR: {input}", ""]
+    scripted_input(monkeypatch, answers)
+
+    run = await run_quickstart_wizard("groq/llama-3.3-70b-versatile")
+
+    assert len(run.prompt_variants) == 3
+    assert "Warning" in capsys.readouterr().out

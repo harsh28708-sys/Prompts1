@@ -4,6 +4,7 @@ RunReport has no run_timestamp field (see schemas.py), so the timestamp used in 
 output filename is generated here, at write time, rather than read off the report.
 """
 
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -11,6 +12,15 @@ from promteval.schemas import RunReport
 
 _COLUMNS = ("Rank", "Variant", "Quality", "Latency (ms)", "Weighted")
 _WIDTHS = (5, 10, 9, 14, 10)
+
+_UNSAFE_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*]')
+
+
+def safe_filename_stub(task_name: str) -> str:
+    """Turns a task_name into something safe to use in a filename on any OS.
+    Matters more now that task_name can come from an AI (see generator.py /
+    `prompteval quickstart`) instead of only being hand-typed."""
+    return _UNSAFE_FILENAME_CHARS.sub("_", task_name.replace(" ", "_"))[:80]
 
 
 def _row(values: tuple, widths: tuple = _WIDTHS) -> str:
@@ -47,15 +57,13 @@ def format_markdown(report: RunReport) -> str:
 def write_json_report(report: RunReport, output_dir: str | Path = ".") -> Path:
     """Writes {task_name}_{timestamp}.json, per Plan.md's persistence format."""
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    safe_task_name = report.task_name.replace(" ", "_")
-    path = Path(output_dir) / f"{safe_task_name}_{timestamp}.json"
+    path = Path(output_dir) / f"{safe_filename_stub(report.task_name)}_{timestamp}.json"
     path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
     return path
 
 
 def write_markdown_report(report: RunReport, output_dir: str | Path = ".") -> Path:
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    safe_task_name = report.task_name.replace(" ", "_")
-    path = Path(output_dir) / f"{safe_task_name}_{timestamp}.md"
+    path = Path(output_dir) / f"{safe_filename_stub(report.task_name)}_{timestamp}.md"
     path.write_text(format_markdown(report), encoding="utf-8")
     return path
