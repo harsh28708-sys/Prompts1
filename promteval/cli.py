@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import json
 import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
 from pydantic import ValidationError
@@ -16,6 +17,7 @@ from promteval.renderer import TemplateRenderError, render_matrix
 from promteval.reporter import format_table, write_json_report, write_markdown_report
 from promteval.schemas import EvalRun, RunReport
 from promteval.scoring import build_run_report
+from promteval.wizard import run_init_wizard
 
 DEFAULT_JUDGE_MODEL = "gemini/gemini-2.0-flash"
 
@@ -43,6 +45,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Report file format to write (default: json).",
     )
 
+    init_parser = subparsers.add_parser("init", help="Interactively build a new input file by answering questions.")
+    init_parser.add_argument(
+        "output_file", nargs="?", default=None,
+        help="Where to save the input file (default: <task_name>.json).",
+    )
+
     return parser
 
 
@@ -62,6 +70,14 @@ async def run_pipeline(run: EvalRun, judge_model: str, concurrency: int, timeout
 def main(argv: list[str] | None = None) -> int:
     load_dotenv()
     args = build_parser().parse_args(argv)
+
+    if args.command == "init":
+        run = run_init_wizard()
+        output_path = Path(args.output_file) if args.output_file else Path(f"{run.task_name.replace(' ', '_')}.json")
+        output_path.write_text(json.dumps(run.model_dump(), indent=2), encoding="utf-8")
+        print(f"\nSaved to: {output_path}")
+        print(f"Run it with: prompteval run {output_path}")
+        return 0
 
     if args.command != "run":
         return 1

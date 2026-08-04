@@ -8,6 +8,7 @@ import litellm
 
 from promteval.cli import DEFAULT_JUDGE_MODEL, build_parser, main
 from promteval.executor import DEFAULT_CONCURRENCY, DEFAULT_TIMEOUT_S
+from promteval.schemas import EvalRun
 
 SAMPLE_INPUT = {
     "task_name": "cli_test",
@@ -100,3 +101,25 @@ def test_main_runs_full_pipeline_and_writes_report(tmp_path, monkeypatch, capsys
     assert len(written_files) == 1
     saved = json.loads(written_files[0].read_text(encoding="utf-8"))
     assert saved["recommended_variant_id"] == "v1"
+
+
+def test_main_init_writes_a_file_that_run_can_actually_load(tmp_path, monkeypatch):
+    # In plain terms: the interactive wizard's output isn't just "some JSON" --
+    # it must be a real, valid input file that `prompteval run` accepts.
+    answers = iter([
+        "Wizard test", "Direct", "Summarize: {msg}", "n",
+        "Hello", "n", "", "",
+    ])
+    monkeypatch.setattr("builtins.input", lambda _prompt_text="": next(answers))
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = main(["init"])
+
+    assert exit_code == 0
+    output_path = tmp_path / "Wizard_test.json"
+    assert output_path.exists()
+
+    saved = json.loads(output_path.read_text(encoding="utf-8"))
+    assert saved["task_name"] == "Wizard test"
+    assert saved["prompt_variants"][0]["template"] == "Summarize: {msg}"
+    EvalRun(**saved)  # doesn't raise -- proves `prompteval run` could load this file
