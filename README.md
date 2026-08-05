@@ -115,15 +115,17 @@ input file afterward, so you can re-run the exact same test later with `promptev
 
 **`prompteval improve`** — different from the other commands: instead of comparing
 multiple prompts, it takes the ONE prompt you're working on, tests it for real
-against a few AI-generated scenarios, and gives you plain-English feedback on how
-to improve it (not a score):
+against a few AI-generated scenarios, and gives you a **score (1-5)** plus a
+**rewritten, improved version** of your prompt:
 
 ```bash
 prompteval improve --judge-model groq/llama-3.3-70b-versatile
 ```
 
-It asks for the context (what you're trying to do) and your prompt (again using
-`{input}` as the placeholder), then saves the full feedback to a markdown file.
+It only asks for your prompt (again using `{input}` as the placeholder) — no
+separate context question; the prompt's own wording is enough to generate
+realistic test scenarios. Saves the score, reasoning, rewritten prompt, and every
+test case's real output to a markdown file afterward.
 
 ## Run it
 

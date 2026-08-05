@@ -212,19 +212,22 @@ def test_main_quickstart_runs_immediately_without_a_separate_run_command(tmp_pat
 
 def test_main_improve_runs_immediately_and_saves_written_feedback(tmp_path, monkeypatch, capsys):
     # In plain terms: `improve` should test the one prompt for real and print a
-    # written critique -- not a score, not a ranked table.
-    canned_answers = ("A customer support bot", "Summarize: {input}", ["msg one", "msg two", "msg three"])
+    # score plus a rewritten prompt -- not a ranked table against other variants.
+    canned_answers = ("Summarize: {input}", ["msg one", "msg two", "msg three"])
     monkeypatch.setattr(cli_module, "run_improve_wizard", AsyncMock(return_value=canned_answers))
-    monkeypatch.setattr(litellm, "acompletion", AsyncMock(return_value=fake_llm_response("Solid start. Try being more specific about tone.")))
+    feedback_json = '{"score": 4, "reasoning": "Solid but a bit vague.", "improved_prompt": "Summarize concisely: {input}"}'
+    monkeypatch.setattr(litellm, "acompletion", AsyncMock(return_value=fake_llm_response(feedback_json)))
     monkeypatch.chdir(tmp_path)
 
     exit_code = main(["improve", "--judge-model", "groq/llama-3.3-70b-versatile"])
 
     out = capsys.readouterr().out
     assert exit_code == 0
-    assert "Solid start. Try being more specific about tone." in out
+    assert "Score: 4/5" in out
+    assert "Solid but a bit vague." in out
+    assert "Summarize concisely: {input}" in out
     assert "Feedback saved to:" in out
-    assert list(tmp_path.glob("A_customer_support_bot_feedback_*.md"))
+    assert list(tmp_path.glob("Summarize_*_feedback_*.md"))
 
 
 def test_main_improve_reports_generation_failure_cleanly(monkeypatch, capsys):

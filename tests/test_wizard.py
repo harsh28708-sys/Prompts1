@@ -154,28 +154,28 @@ async def test_quickstart_warns_but_does_not_fail_when_placeholder_missing(monke
     assert "Warning" in capsys.readouterr().out
 
 
-async def test_improve_wizard_returns_context_prompt_and_scenarios(monkeypatch):
+async def test_improve_wizard_returns_prompt_and_scenarios_with_no_context_question(monkeypatch):
+    # In plain terms: only ONE question now (the prompt itself) -- no separate
+    # "what's the context?" step. The prompt's own wording is what's used to
+    # infer realistic scenarios.
     generate_cases_mock = AsyncMock(return_value=["scenario one", "scenario two", "scenario three"])
     monkeypatch.setattr(wizard_module, "generate_test_cases", generate_cases_mock)
 
-    answers = ["A customer support bot", "Summarize: {input}"]
-    scripted_input(monkeypatch, answers)
+    scripted_input(monkeypatch, ["Summarize: {input}"])
 
-    context, prompt_template, scenarios = await run_improve_wizard("groq/llama-3.3-70b-versatile")
+    prompt_template, scenarios = await run_improve_wizard("groq/llama-3.3-70b-versatile")
 
-    assert context == "A customer support bot"
     assert prompt_template == "Summarize: {input}"
     assert scenarios == ["scenario one", "scenario two", "scenario three"]
-    # the context itself becomes the "task" description fed into scenario generation
-    generate_cases_mock.assert_awaited_once_with(context, "groq/llama-3.3-70b-versatile", n=3)
+    # the prompt's own text becomes the "task" description fed into scenario generation
+    generate_cases_mock.assert_awaited_once_with(prompt_template, "groq/llama-3.3-70b-versatile", n=3)
 
 
 async def test_improve_wizard_warns_but_does_not_fail_when_placeholder_missing(monkeypatch, capsys):
     monkeypatch.setattr(wizard_module, "generate_test_cases", AsyncMock(return_value=["a", "b", "c"]))
-    answers = ["Some context", "A prompt with no placeholder at all"]
-    scripted_input(monkeypatch, answers)
+    scripted_input(monkeypatch, ["A prompt with no placeholder at all"])
 
-    _context, prompt_template, _scenarios = await run_improve_wizard("groq/llama-3.3-70b-versatile")
+    prompt_template, _scenarios = await run_improve_wizard("groq/llama-3.3-70b-versatile")
 
     assert prompt_template == "A prompt with no placeholder at all"
     assert "Warning" in capsys.readouterr().out

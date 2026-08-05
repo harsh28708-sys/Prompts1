@@ -64,3 +64,12 @@ class RunReport(Strict):
     rationale: str
     raw_results: list[LLMCallResult]
     judge_results: list[JudgeResult]
+
+
+class PromptFeedback(Strict):
+    """`prompteval improve`'s result: a score + a rewritten, better version of
+    the ONE prompt submitted -- not a ranking against other variants."""
+
+    score: int = Field(ge=1, le=5)
+    reasoning: str
+    improved_prompt: str

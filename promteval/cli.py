@@ -12,7 +12,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic import ValidationError
 
-from promteval.critique import generate_critique, write_critique_report
+from promteval.critique import generate_feedback, write_feedback_report
 from promteval.executor import DEFAULT_CONCURRENCY, DEFAULT_TIMEOUT_S, execute_matrix
 from promteval.generator import GenerationError
 from promteval.judge import judge_call_result
@@ -54,8 +54,8 @@ THE WAYS TO USE IT
 
     prompteval improve             Got ONE prompt and want it better? AI tests
                                     it against a few realistic scenarios and
-                                    gives you plain-English feedback -- not a
-                                    score, actual suggestions to improve it.
+                                    gives you a score (1-5) plus a rewritten,
+                                    improved version of your prompt.
 
     prompteval init <file>         Answer the same kind of questions, but SAVE
                                     them to a file you can reuse or edit later.
@@ -157,7 +157,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     improve_parser = subparsers.add_parser(
         "improve",
-        help="Submit ONE prompt + context; AI tests it against generated scenarios and gives plain-English feedback.",
+        help="Submit ONE prompt; AI tests it against generated scenarios and returns a score + a rewritten, improved prompt.",
     )
     improve_parser.add_argument(
         "--model", default=DEFAULT_MODEL,
@@ -228,20 +228,20 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "improve":
         try:
-            context, prompt_template, scenario_values = asyncio.run(run_improve_wizard(args.model))
+            prompt_template, scenario_values = asyncio.run(run_improve_wizard(args.model))
         except GenerationError as exc:
             print(f"\nError: {exc}", file=sys.stderr)
             return 1
 
         run = EvalRun(
-            task_name=f"Prompt feedback: {context}",
+            task_name=f"Prompt feedback: {prompt_template[:60]}",
             models=[args.model],
             prompt_variants=[PromptVariant(id="v1", name="Your prompt", template=prompt_template)],
             test_cases=[
                 TestCase(id=f"tc{i}", variables={QUICKSTART_VARIABLE: v})
                 for i, v in enumerate(scenario_values, start=1)
             ],
-            judge_criteria="n/a",  # unused -- improve mode critiques instead of scoring
+            judge_criteria="n/a",  # unused -- improve mode scores/rewrites instead of ranking
         )
 
         try:
@@ -256,13 +256,17 @@ def main(argv: list[str] | None = None) -> int:
 
         judge_model = args.judge_model or args.model
         try:
-            critique = asyncio.run(generate_critique(context, prompt_template, raw_results, judge_model))
+            feedback = asyncio.run(generate_feedback(prompt_template, raw_results, judge_model))
         except GenerationError as exc:
             print(f"\nError: {exc}", file=sys.stderr)
             return 1
 
-        print("\n" + critique)
-        feedback_path = write_critique_report(context, prompt_template, raw_results, critique)
+        print(f"\nScore: {feedback.score}/5")
+        print(feedback.reasoning)
+        print("\nImproved prompt:")
+        print(feedback.improved_prompt)
+
+        feedback_path = write_feedback_report(prompt_template, raw_results, feedback)
         print(f"\nFeedback saved to: {feedback_path}")
         return 0
 

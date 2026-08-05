@@ -107,27 +107,26 @@ def run_init_wizard() -> EvalRun:
     )
 
 
-async def run_improve_wizard(model: str) -> tuple[str, str, list[str]]:
-    """Asks for the situation's context and ONE prompt (not multiple variants),
-    then AI-generates a few realistic scenarios to actually test it against.
-    Returns (context, prompt_template, scenario_values) -- the caller runs the
-    prompt for real and gets a written critique back, not a 1-5 score."""
+async def run_improve_wizard(model: str) -> tuple[str, list[str]]:
+    """Asks for ONE prompt (not multiple variants, no context question -- the
+    prompt's own wording is used to infer realistic scenarios), then AI-generates
+    a few scenarios to actually test it against. Returns (prompt_template,
+    scenario_values) -- the caller runs the prompt for real and gets back a
+    score + a rewritten, improved version, not a ranking against other variants."""
     print("Let's get feedback on your prompt.\n")
 
-    context = _prompt("What's the context? (e.g. 'A customer support bot that summarizes tickets')")
-
     placeholder = "{" + QUICKSTART_VARIABLE + "}"
-    prompt_template = _prompt(f"\nYour prompt (use {placeholder} where the real input goes)")
+    prompt_template = _prompt(f"Your prompt (use {placeholder} where the real input goes)")
     if placeholder not in prompt_template:
         print(f"  Warning: this doesn't include {placeholder} -- it'll run the exact same way every time.")
 
-    print(f"\nGenerating {IMPROVE_SCENARIO_COUNT} sample scenarios for this context...")
-    scenario_values = await generate_test_cases(context, model, n=IMPROVE_SCENARIO_COUNT)
+    print(f"\nGenerating {IMPROVE_SCENARIO_COUNT} sample scenarios for this prompt...")
+    scenario_values = await generate_test_cases(prompt_template, model, n=IMPROVE_SCENARIO_COUNT)
     print("Generated scenarios:")
     for i, value in enumerate(scenario_values, start=1):
         print(f"  {i}. {value}")
 
-    return context, prompt_template, scenario_values
+    return prompt_template, scenario_values
 
 
 async def run_quickstart_wizard(model: str) -> EvalRun:

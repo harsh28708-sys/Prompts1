@@ -1,15 +1,18 @@
-"""Tests for critique.py (`prompteval improve`'s judge -- a written critique,
-not a 1-5 score), with litellm mocked so no real API calls happen."""
+"""Tests for critique.py (`prompteval improve`'s evaluator -- a score + rewritten
+prompt, not a 1-5 score against other variants, and not prose critique), with
+litellm mocked so no real API calls happen."""
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import promteval.critique as critique_module
-from promteval.critique import generate_critique, write_critique_report
+from promteval.critique import generate_feedback, write_feedback_report
 from promteval.generator import GenerationError
-from promteval.schemas import LLMCallResult
+from promteval.schemas import LLMCallResult, PromptFeedback
 
 MODEL = "groq/llama-3.3-70b-versatile"
+
+VALID_JSON = '{"score": 4, "reasoning": "Solid but a bit vague.", "improved_prompt": "Summarize concisely: {input}"}'
 
 
 def fake_response(text: str):
@@ -23,65 +26,92 @@ def make_result(output="A summary.", error=None) -> LLMCallResult:
     )
 
 
-async def test_generate_critique_returns_the_models_text(monkeypatch):
-    monkeypatch.setattr(
-        critique_module.litellm, "acompletion",
-        AsyncMock(return_value=fake_response("Here's how to improve your prompt: ...")),
-    )
+async def test_generate_feedback_returns_score_reasoning_and_improved_prompt(monkeypatch):
+    monkeypatch.setattr(critique_module.litellm, "acompletion", AsyncMock(return_value=fake_response(VALID_JSON)))
 
-    text = await generate_critique("some context", "Summarize: {input}", [make_result()], MODEL)
+    feedback = await generate_feedback("Summarize: {input}", [make_result()], MODEL)
 
-    assert text == "Here's how to improve your prompt: ..."
+    assert feedback.score == 4
+    assert feedback.reasoning == "Solid but a bit vague."
+    assert feedback.improved_prompt == "Summarize concisely: {input}"
 
 
-async def test_generate_critique_fails_cleanly_when_every_run_failed(monkeypatch):
-    # In plain terms: if the prompt never produced a single real output, there's
-    # nothing genuine to critique -- that should be a clear error, not a made-up
-    # critique of outputs that don't exist.
+async def test_generate_feedback_tolerates_markdown_fences(monkeypatch):
+    wrapped = f"```json\n{VALID_JSON}\n```"
+    monkeypatch.setattr(critique_module.litellm, "acompletion", AsyncMock(return_value=fake_response(wrapped)))
+
+    feedback = await generate_feedback("Summarize: {input}", [make_result()], MODEL)
+
+    assert feedback.score == 4
+
+
+async def test_generate_feedback_retries_once_on_malformed_json_then_succeeds(monkeypatch):
+    mock = AsyncMock(side_effect=[fake_response("not json at all"), fake_response(VALID_JSON)])
+    monkeypatch.setattr(critique_module.litellm, "acompletion", mock)
+
+    feedback = await generate_feedback("Summarize: {input}", [make_result()], MODEL)
+
+    assert feedback.score == 4
+    assert mock.await_count == 2
+
+
+async def test_generate_feedback_gives_up_after_two_bad_attempts(monkeypatch):
+    mock = AsyncMock(return_value=fake_response("still not json"))
+    monkeypatch.setattr(critique_module.litellm, "acompletion", mock)
+
+    try:
+        await generate_feedback("Summarize: {input}", [make_result()], MODEL)
+        raise AssertionError("expected GenerationError")
+    except GenerationError:
+        pass
+    assert mock.await_count == 2
+
+
+async def test_generate_feedback_out_of_range_score_is_treated_as_unparseable(monkeypatch):
+    # A "7" would violate PromptFeedback's own 1-5 constraint -- must be caught
+    # as a parse failure (and retried) rather than crashing when building the model.
+    bad = '{"score": 7, "reasoning": "way too generous", "improved_prompt": "x"}'
+    mock = AsyncMock(side_effect=[fake_response(bad), fake_response(VALID_JSON)])
+    monkeypatch.setattr(critique_module.litellm, "acompletion", mock)
+
+    feedback = await generate_feedback("Summarize: {input}", [make_result()], MODEL)
+
+    assert feedback.score == 4
+
+
+async def test_generate_feedback_fails_cleanly_when_every_run_failed(monkeypatch):
     mock = AsyncMock()
     monkeypatch.setattr(critique_module.litellm, "acompletion", mock)
     failed = make_result(output=None, error="timeout")
 
     try:
-        await generate_critique("ctx", "Summarize: {input}", [failed], MODEL)
+        await generate_feedback("Summarize: {input}", [failed], MODEL)
         raise AssertionError("expected GenerationError")
     except GenerationError as exc:
-        assert "nothing real to critique" in str(exc)
-    mock.assert_not_called()  # never even asks the model to critique nothing
+        assert "nothing real to evaluate" in str(exc)
+    mock.assert_not_called()
 
 
-async def test_generate_critique_call_failure_becomes_generation_error(monkeypatch):
+async def test_generate_feedback_call_failure_becomes_generation_error(monkeypatch):
     monkeypatch.setattr(critique_module.litellm, "acompletion", AsyncMock(side_effect=RuntimeError("boom")))
 
     try:
-        await generate_critique("ctx", "Summarize: {input}", [make_result()], MODEL)
+        await generate_feedback("Summarize: {input}", [make_result()], MODEL)
         raise AssertionError("expected GenerationError")
     except GenerationError as exc:
         assert "boom" in str(exc)
 
 
-async def test_generate_critique_still_works_with_some_failures_mixed_in(monkeypatch):
-    # In plain terms: if 2 of 3 scenarios succeeded, critique the 2 real ones
-    # rather than refusing outright.
-    mock = AsyncMock(return_value=fake_response("Feedback based on the 2 successful runs."))
-    monkeypatch.setattr(critique_module.litellm, "acompletion", mock)
-    results = [make_result(), make_result(), make_result(output=None, error="rate limited")]
-
-    text = await generate_critique("ctx", "Summarize: {input}", results, MODEL)
-
-    assert "Feedback" in text
-    sent_prompt = mock.call_args.kwargs["messages"][0]["content"]
-    assert "1 of 3 test runs failed" in sent_prompt
-
-
-def test_write_critique_report_creates_a_real_file(tmp_path):
+def test_write_feedback_report_creates_a_real_file(tmp_path):
+    feedback = PromptFeedback(score=4, reasoning="Solid but a bit vague.", improved_prompt="Summarize concisely: {input}")
     results = [make_result(output="Output A"), make_result(output=None, error="timeout")]
 
-    path = write_critique_report("my context", "Summarize: {input}", results, "Great feedback here.", tmp_path)
+    path = write_feedback_report("Summarize: {input}", results, feedback, tmp_path)
 
     assert path.exists()
     content = path.read_text(encoding="utf-8")
-    assert "my context" in content
+    assert "Score: 4/5" in content
+    assert "Solid but a bit vague." in content
+    assert "Summarize concisely: {input}" in content
     assert "Output A" in content
     assert "Failed: timeout" in content
-    assert "Great feedback here." in content
