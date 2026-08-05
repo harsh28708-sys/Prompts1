@@ -94,8 +94,17 @@ async def run_pipeline(run: EvalRun, judge_model: str, concurrency: int, timeout
     return build_run_report(run, raw_results, list(judge_results))
 
 
+_SUBCOMMANDS = {"run", "init", "quickstart"}
+
+
 def main(argv: list[str] | None = None) -> int:
     load_dotenv()
+    if argv is None:
+        argv = sys.argv[1:]
+    # No subcommand (or flags with no subcommand, e.g. `prompteval --judge-model x`)
+    # defaults to quickstart -- `run`/`init` still work exactly as before when given.
+    if not argv or (argv[0] not in _SUBCOMMANDS and argv[0] not in ("-h", "--help")):
+        argv = ["quickstart", *argv]
     args = build_parser().parse_args(argv)
 
     if args.command == "init":

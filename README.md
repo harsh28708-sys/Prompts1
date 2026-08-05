@@ -82,12 +82,15 @@ prompteval init my_task.json
 prompteval run my_task.json --judge-model groq/llama-3.3-70b-versatile
 ```
 
-**`prompteval quickstart`** — the fastest way to try the tool. AI generates a task
-(or you can type your own) plus 5 realistic test cases, you just type your 3 prompts,
-and it evaluates immediately — no file, no second command:
+**`prompteval quickstart`** (also the default — see below) — the fastest way to try
+the tool. AI generates a task (or you can type your own) plus 5 realistic test cases,
+you just type your 3 prompts, and it evaluates immediately — no file, no second command:
 
 ```bash
 prompteval quickstart --judge-model groq/llama-3.3-70b-versatile
+
+# or, since quickstart is the default when no subcommand is given:
+prompteval --judge-model groq/llama-3.3-70b-versatile
 ```
 
 Your 3 prompts should use `{input}` as the placeholder — that's the fixed variable
