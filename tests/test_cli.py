@@ -5,12 +5,22 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import litellm
+import pytest
 
 import promteval.cli as cli_module
 from promteval.cli import DEFAULT_JUDGE_MODEL, build_parser, main
 from promteval.executor import DEFAULT_CONCURRENCY, DEFAULT_TIMEOUT_S
 from promteval.generator import GenerationError
 from promteval.schemas import EvalRun
+
+
+@pytest.fixture(autouse=True)
+def _fake_api_key(monkeypatch):
+    """Most tests below exercise behavior that happens *after* the CLI's own
+    "is any API key configured?" guard -- this fakes one key so that guard never
+    blocks them, regardless of whether the machine running the tests has a real
+    .env file. The one test that actually checks the guard clears it explicitly."""
+    monkeypatch.setenv("GROQ_API_KEY", "test-key-not-real")
 
 SAMPLE_INPUT = {
     "task_name": "cli_test",
@@ -48,6 +58,52 @@ def test_build_parser_flags_override_defaults():
     assert args.concurrency == 3
     assert args.timeout == 10
     assert args.format == "markdown"
+
+
+@pytest.mark.parametrize("token", ["/help", "help", "-h", "--help"])
+def test_main_shows_friendly_help_for_any_help_token(token, capsys):
+    # In plain terms: someone who has no idea what to do should be able to type
+    # any of the obvious things ("/help", "help", "-h", "--help") and get the
+    # same warm, example-filled guide -- not argparse's terse default.
+    exit_code = main([token])
+
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert "NEW HERE?" in out
+    assert "prompteval init" in out
+    assert "prompteval run" in out
+
+
+def test_main_subcommand_specific_help_still_works(capsys):
+    # In plain terms: `prompteval run -h` should still show argparse's own
+    # flag-by-flag help for `run` specifically, not the general friendly guide.
+    with pytest.raises(SystemExit):
+        main(["run", "-h"])
+
+    out = capsys.readouterr().out
+    assert "NEW HERE?" not in out
+    assert "input_file" in out or "--judge-model" in out
+
+
+def test_main_reports_missing_api_key_without_crashing(monkeypatch, capsys):
+    # In plain terms: running the tool with zero API keys configured anywhere
+    # should give a clear, actionable message -- not a cryptic network error
+    # buried three layers deep in a real LLM call.
+    #
+    # python-dotenv's load_dotenv() finds .env by walking up from cli.py's own
+    # location, not from the process's current directory -- so chdir alone can't
+    # stop main() from finding this repo's real .env (which has real keys in
+    # it). Neutralizing load_dotenv() itself is the only reliable way to test
+    # "no key configured" without depending on whatever machine runs this test.
+    monkeypatch.setattr(cli_module, "load_dotenv", lambda: None)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    exit_code = main(["run", "some_file.json"])
+
+    assert exit_code == 1
+    assert "No API key found" in capsys.readouterr().err
 
 
 def test_main_reports_missing_file_without_crashing(capsys):

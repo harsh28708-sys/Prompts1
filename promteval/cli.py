@@ -5,6 +5,7 @@ into the single command described in Plan.md: `prompteval run <input.json>`.
 import argparse
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -26,6 +27,70 @@ from promteval.scoring import build_run_report
 from promteval.wizard import DEFAULT_MODEL, run_init_wizard, run_quickstart_wizard
 
 DEFAULT_JUDGE_MODEL = "gemini/gemini-2.0-flash"
+
+_API_KEY_VARS = ("OPENROUTER_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY")
+
+HELP_TEXT = """
+PromtEval -- test a few different versions of a prompt against a real AI, and
+see which one actually works best, instead of guessing.
+
+NEW HERE? JUST RUN:
+    prompteval
+
+It will ask you everything it needs, right there in the terminal: a task, then
+3 prompts to compare. No files to write, no setup beyond an API key (below).
+
+THE THREE WAYS TO USE IT
+    prompteval                     Fastest way to try it out. AI makes up a
+    (same as `prompteval quickstart`)  task and test data for you; you just
+                                    write 3 prompts. Runs immediately.
+
+    prompteval init <file>         Answer the same kind of questions, but SAVE
+                                    them to a file you can reuse or edit later.
+
+    prompteval run <file>          Run an input file you already have (one you
+                                    built with `init`, or wrote by hand).
+
+YOU NEED ONE FREE API KEY
+    Pick any one of these (all have a free tier):
+        Groq:       https://console.groq.com/keys
+        OpenRouter: https://openrouter.ai/keys
+        Gemini:     https://aistudio.google.com/apikey
+    Copy .env.example to .env and paste your key in, e.g.:
+        GROQ_API_KEY=your-key-here
+
+    Also add --judge-model groq/llama-3.3-70b-versatile to whichever command
+    you run -- the tool's built-in default judge needs Google billing set up,
+    which most free accounts don't have.
+
+EXAMPLE
+    prompteval --judge-model groq/llama-3.3-70b-versatile
+
+MORE HELP
+    prompteval /help            Show this message again
+    prompteval run -h           Show flags for a specific command
+    See README.md for the full guide.
+""".strip("\n")
+
+NO_API_KEY_MESSAGE = """
+No API key found, so there's nothing to actually run prompts against yet.
+
+Pick any one of these (all have a free tier):
+    Groq:       https://console.groq.com/keys
+    OpenRouter: https://openrouter.ai/keys
+    Gemini:     https://aistudio.google.com/apikey
+
+Then:
+    1. Copy .env.example to .env (or create a .env file yourself)
+    2. Paste your key in, e.g.:  GROQ_API_KEY=your-key-here
+    3. Run this command again
+
+Run `prompteval /help` for the full guide.
+""".strip("\n")
+
+
+def _has_any_api_key() -> bool:
+    return any(os.environ.get(key) for key in _API_KEY_VARS)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -95,17 +160,30 @@ async def run_pipeline(run: EvalRun, judge_model: str, concurrency: int, timeout
 
 
 _SUBCOMMANDS = {"run", "init", "quickstart"}
+_HELP_TOKENS = {"/help", "help", "-h", "--help"}
 
 
 def main(argv: list[str] | None = None) -> int:
     load_dotenv()
     if argv is None:
         argv = sys.argv[1:]
+
+    # A bare help request as the very first word always shows the friendly guide,
+    # not argparse's terser default. `prompteval run -h` (help for a *specific*
+    # command) still falls through to argparse below, since "run" is argv[0] there.
+    if argv and argv[0] in _HELP_TOKENS:
+        print(HELP_TEXT)
+        return 0
+
     # No subcommand (or flags with no subcommand, e.g. `prompteval --judge-model x`)
     # defaults to quickstart -- `run`/`init` still work exactly as before when given.
-    if not argv or (argv[0] not in _SUBCOMMANDS and argv[0] not in ("-h", "--help")):
+    if not argv or argv[0] not in _SUBCOMMANDS:
         argv = ["quickstart", *argv]
     args = build_parser().parse_args(argv)
+
+    if args.command in ("run", "quickstart") and not _has_any_api_key():
+        print(NO_API_KEY_MESSAGE, file=sys.stderr)
+        return 1
 
     if args.command == "init":
         run = run_init_wizard()

@@ -4,6 +4,9 @@ A CLI tool that runs prompt variants against real LLMs, scores each output with 
 LLM against your rubric, and ranks the variants by quality, cost, and latency to
 recommend a winner.
 
+> Not sure where to start? Once installed, run `prompteval /help` (or just `-h`) for
+> a friendly walkthrough right in your terminal — no need to read this whole file.
+
 ## Install
 
 ```bash
