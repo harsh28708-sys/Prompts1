@@ -22,6 +22,17 @@ pip install -e ".[dev]"
 This installs the `prompteval` command into your virtual environment, along with
 `pytest` and `ruff` for development.
 
+**Don't want to activate the venv every time?** Two options:
+- Double-click **`Run PromtEval.cmd`** (Windows) — a literal run button. Opens a
+  window, runs `quickstart`, and stays open afterward so you can read the results.
+- Or run `.\prompteval.cmd <command>` from a terminal in this folder (e.g.
+  `.\prompteval.cmd run examples/sample_run.json`) — same idea, but lets you pass
+  any command/flags, for when you're already in a terminal.
+
+Both just call the venv's `prompteval` directly, so no PATH changes or activation
+needed. (You can also add `.venv\Scripts` to your PATH permanently instead, if
+you'd rather use the plain `prompteval` command everywhere.)
+
 ## Set up API keys
 
 Copy the template and fill in real keys for whichever providers you want to use:

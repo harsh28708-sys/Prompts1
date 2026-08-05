@@ -20,10 +20,22 @@ IMPROVE_SCENARIO_COUNT = 3
 _VARIABLE_RE = re.compile(r"\{(\w+)\}")
 
 
+_BOM = chr(0xFEFF)
+
+
+def _read_input(prompt_text: str) -> str:
+    """input(), cleaned. Some terminals/pipes (observed via PowerShell piping
+    into a .cmd-wrapped run) inject a leading BOM character as the very first
+    byte of stdin -- str.strip() alone does NOT remove it (it's not whitespace
+    to Python), so a "blank" answer meant to trigger a default would otherwise
+    come through as one invisible non-empty character instead of ""."""
+    return input(prompt_text).replace(_BOM, "").strip()
+
+
 def _prompt(question: str, default: str | None = None) -> str:
     suffix = f" [{default}]" if default else ""
     while True:
-        answer = input(f"{question}{suffix}: ").strip()
+        answer = _read_input(f"{question}{suffix}: ")
         if answer:
             return answer
         if default is not None:
@@ -33,7 +45,7 @@ def _prompt(question: str, default: str | None = None) -> str:
 
 def _prompt_yes_no(question: str, default: bool) -> bool:
     suffix = " [Y/n]" if default else " [y/N]"
-    answer = input(f"{question}{suffix}: ").strip().lower()
+    answer = _read_input(f"{question}{suffix}: ").lower()
     if not answer:
         return default
     return answer.startswith("y")
@@ -123,7 +135,7 @@ async def run_quickstart_wizard(model: str) -> EvalRun:
     prompts against them; the caller runs the evaluation immediately afterward."""
     print("Let's set up a quick evaluation with AI-generated test data.\n")
 
-    task_input = input("What task do you want to test? (press Enter for a random AI-generated task): ").strip()
+    task_input = _read_input("What task do you want to test? (press Enter for a random AI-generated task): ")
     if task_input:
         task_name = task_input
     else:

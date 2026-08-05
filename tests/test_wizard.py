@@ -38,6 +38,18 @@ def test_prompt_falls_back_to_default_on_empty_answer(monkeypatch):
     assert _prompt("Question", default="fallback") == "fallback"
 
 
+def test_prompt_treats_a_stray_bom_character_as_blank(monkeypatch):
+    # In plain terms: this is the real bug found running the double-click .cmd
+    # wrapper through PowerShell -- a leading BOM byte in piped stdin isn't
+    # whitespace to Python, so plain .strip() alone would treat it as a real,
+    # non-empty answer instead of triggering the default (e.g. random task gen).
+    bom = chr(0xFEFF)
+    scripted_input(monkeypatch, [bom, bom + "  ", "real answer"])
+    assert _prompt("Question", default="fallback") == "fallback"  # first BOM-only answer
+    assert _prompt("Question", default="fallback") == "fallback"  # BOM + trailing spaces
+    assert _prompt("Question", default="fallback") == "real answer"
+
+
 def test_prompt_yes_no_uses_default_on_empty_answer(monkeypatch):
     scripted_input(monkeypatch, [""])
     assert _prompt_yes_no("Continue?", default=True) is True
