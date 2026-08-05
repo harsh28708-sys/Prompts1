@@ -239,44 +239,34 @@ def test_main_improve_reports_generation_failure_cleanly(monkeypatch, capsys):
     assert "model unavailable" in capsys.readouterr().err
 
 
-def test_main_with_no_args_defaults_to_quickstart(tmp_path, monkeypatch):
-    canned_run = EvalRun(
-        task_name="No args demo",
-        models=["groq/llama-3.3-70b-versatile"],
-        prompt_variants=[{"id": "v1", "name": "Prompt 1", "template": "Summarize: {input}"}],
-        test_cases=[{"id": "tc1", "variables": {"input": "hello"}}],
-        judge_criteria="n/a",
-    )
-    generate_wizard = AsyncMock(return_value=canned_run)
-    monkeypatch.setattr(cli_module, "run_quickstart_wizard", generate_wizard)
-    monkeypatch.setattr(litellm, "acompletion", AsyncMock(return_value=fake_llm_response('{"score": 4, "reasoning": "fine"}')))
+def test_main_with_no_args_defaults_to_improve(tmp_path, monkeypatch):
+    canned_answers = ("Summarize: {input}", ["msg one", "msg two", "msg three"])
+    generate_wizard = AsyncMock(return_value=canned_answers)
+    monkeypatch.setattr(cli_module, "run_improve_wizard", generate_wizard)
+    feedback_json = '{"score": 4, "reasoning": "Solid.", "improved_prompt": "Summarize concisely: {input}"}'
+    monkeypatch.setattr(litellm, "acompletion", AsyncMock(return_value=fake_llm_response(feedback_json)))
     monkeypatch.chdir(tmp_path)
 
     exit_code = main([])  # bare `prompteval`, no subcommand at all
 
     assert exit_code == 0
-    generate_wizard.assert_awaited_once()  # proves it actually ran the quickstart flow
-    assert (tmp_path / "No_args_demo.json").exists()
+    generate_wizard.assert_awaited_once()  # proves it actually ran the improve flow
+    assert list(tmp_path.glob("Summarize_*_feedback_*.md"))
 
 
-def test_main_with_only_flags_defaults_to_quickstart_and_applies_them(tmp_path, monkeypatch):
+def test_main_with_only_flags_defaults_to_improve_and_applies_them(tmp_path, monkeypatch):
     # In plain terms: `prompteval --judge-model X` (no subcommand) should still
     # apply --judge-model, not silently ignore it.
-    canned_run = EvalRun(
-        task_name="Flags only demo",
-        models=["groq/llama-3.3-70b-versatile"],
-        prompt_variants=[{"id": "v1", "name": "Prompt 1", "template": "Summarize: {input}"}],
-        test_cases=[{"id": "tc1", "variables": {"input": "hello"}}],
-        judge_criteria="n/a",
-    )
-    monkeypatch.setattr(cli_module, "run_quickstart_wizard", AsyncMock(return_value=canned_run))
-    monkeypatch.setattr(litellm, "acompletion", AsyncMock(return_value=fake_llm_response('{"score": 4, "reasoning": "fine"}')))
+    canned_answers = ("Summarize: {input}", ["msg one", "msg two", "msg three"])
+    monkeypatch.setattr(cli_module, "run_improve_wizard", AsyncMock(return_value=canned_answers))
+    feedback_json = '{"score": 4, "reasoning": "Solid.", "improved_prompt": "Summarize concisely: {input}"}'
+    monkeypatch.setattr(litellm, "acompletion", AsyncMock(return_value=fake_llm_response(feedback_json)))
     monkeypatch.chdir(tmp_path)
 
     exit_code = main(["--judge-model", "groq/llama-3.3-70b-versatile"])
 
     assert exit_code == 0
-    assert (tmp_path / "Flags_only_demo.json").exists()
+    assert list(tmp_path.glob("Summarize_*_feedback_*.md"))
 
 
 def test_main_quickstart_reports_generation_failure_cleanly(monkeypatch, capsys):

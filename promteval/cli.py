@@ -38,27 +38,28 @@ DEFAULT_JUDGE_MODEL = "gemini/gemini-2.0-flash"
 _API_KEY_VARS = ("OPENROUTER_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY")
 
 HELP_TEXT = """
-PromtEval -- test a few different versions of a prompt against a real AI, and
-see which one actually works best, instead of guessing.
+PromtEval -- test a prompt against a real AI and get a score plus a better
+version of it, instead of guessing whether your wording is any good.
 
 NEW HERE? JUST RUN:
     prompteval
 
-It will ask you everything it needs, right there in the terminal: a task, then
-3 prompts to compare. No files to write, no setup beyond an API key (below).
+It will ask for your prompt right there in the terminal, test it against a
+few realistic scenarios, and give you a score + a rewritten, better version.
 
 THE WAYS TO USE IT
-    prompteval                     Fastest way to try it out. AI makes up a
-    (same as `prompteval quickstart`)  task and test data for you; you just
-                                    write 3 prompts. Runs immediately.
-
-    prompteval improve             Got ONE prompt and want it better? AI tests
-                                    it against a few realistic scenarios and
+    prompteval                     Got ONE prompt and want it better? AI tests
+    (same as `prompteval improve`) it against a few realistic scenarios and
                                     gives you a score (1-5) plus a rewritten,
                                     improved version of your prompt.
 
-    prompteval init <file>         Answer the same kind of questions, but SAVE
-                                    them to a file you can reuse or edit later.
+    prompteval quickstart          Want to compare 3 different prompts instead
+                                    of improving one? AI makes up a task and
+                                    test data for you; you write 3 prompts.
+
+    prompteval init <file>         Answer the same kind of questions as
+                                    quickstart, but SAVE them to a file you
+                                    can reuse or edit later.
 
     prompteval run <file>          Run an input file you already have (one you
                                     built with `init`, or wrote by hand).
@@ -209,9 +210,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     # No subcommand (or flags with no subcommand, e.g. `prompteval --judge-model x`)
-    # defaults to quickstart -- `run`/`init` still work exactly as before when given.
+    # defaults to improve -- `run`/`init`/`quickstart` still work exactly as before when given.
     if not argv or argv[0] not in _SUBCOMMANDS:
-        argv = ["quickstart", *argv]
+        argv = ["improve", *argv]
     args = build_parser().parse_args(argv)
 
     if args.command in ("run", "quickstart", "improve") and not _has_any_api_key():

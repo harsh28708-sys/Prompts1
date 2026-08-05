@@ -1,8 +1,8 @@
 # PromtEval
 
-A CLI tool that runs prompt variants against real LLMs, scores each output with a judge
-LLM against your rubric, and ranks the variants by quality, cost, and latency to
-recommend a winner.
+A CLI tool for testing prompts against real LLMs. Give it one prompt and it scores it
+and hands back a better version; give it several and it ranks them by quality, cost,
+and latency to recommend a winner.
 
 > Not sure where to start? Once installed, run `prompteval /help` (or just `-h`) for
 > a friendly walkthrough right in your terminal — no need to read this whole file.
@@ -24,7 +24,8 @@ This installs the `prompteval` command into your virtual environment, along with
 
 **Don't want to activate the venv every time?** Two options:
 - Double-click **`Run PromtEval.cmd`** (Windows) — a literal run button. Opens a
-  window, runs `quickstart`, and stays open afterward so you can read the results.
+  window, runs `improve` (asks for one prompt, gives a score + rewrite), and
+  stays open afterward so you can read the results.
 - Or run `.\prompteval.cmd <command>` from a terminal in this folder (e.g.
   `.\prompteval.cmd run examples/sample_run.json`) — same idea, but lets you pass
   any command/flags, for when you're already in a terminal.
@@ -83,49 +84,49 @@ An input file is a JSON object with five fields:
 
 See [`examples/sample_run.json`](examples/sample_run.json) for a full working example.
 
-You don't have to hand-write this file — see the two commands below that build it
+You don't have to hand-write this file — see the commands below that build it
 (or skip it entirely) for you.
 
-## Don't want to write a JSON file by hand?
+## Have ONE prompt you want feedback on? (the default)
 
-**`prompteval init`** — asks you everything in the terminal (task name, prompt
-variants, test cases, rubric) and saves it as a real input file you can run or edit later:
+**`prompteval improve`** — takes the ONE prompt you're working on, tests it for
+real against a few AI-generated scenarios, and gives you a **score (1-5)** plus a
+**rewritten, improved version** of your prompt:
 
 ```bash
-prompteval init my_task.json
-prompteval run my_task.json --judge-model groq/llama-3.3-70b-versatile
+prompteval improve --judge-model groq/llama-3.3-70b-versatile
+
+# or, since improve is the default when no subcommand is given:
+prompteval --judge-model groq/llama-3.3-70b-versatile
 ```
 
-**`prompteval quickstart`** (also the default — see below) — the fastest way to try
-the tool. AI generates a task (or you can type your own) plus 5 realistic test cases,
-you just type your 3 prompts, and it evaluates immediately — no file, no second command:
+It only asks for your prompt (use `{input}` as the placeholder for the part that
+changes) — no separate context question; the prompt's own wording is enough to
+generate realistic test scenarios. Saves the score, reasoning, rewritten prompt,
+and every test case's real output to a markdown file afterward.
+
+## Want to compare several different prompts instead?
+
+**`prompteval quickstart`** — AI generates a task (or you can type your own) plus
+5 realistic test cases, you type 3 different prompts to compare, and it evaluates
+immediately — no file, no second command:
 
 ```bash
 prompteval quickstart --judge-model groq/llama-3.3-70b-versatile
-
-# or, since quickstart is the default when no subcommand is given:
-prompteval --judge-model groq/llama-3.3-70b-versatile
 ```
 
 Your 3 prompts should use `{input}` as the placeholder — that's the fixed variable
 name the AI-generated test cases fill in. It still saves a copy of the generated
 input file afterward, so you can re-run the exact same test later with `prompteval run`.
 
-## Just have ONE prompt you want feedback on?
-
-**`prompteval improve`** — different from the other commands: instead of comparing
-multiple prompts, it takes the ONE prompt you're working on, tests it for real
-against a few AI-generated scenarios, and gives you a **score (1-5)** plus a
-**rewritten, improved version** of your prompt:
+**`prompteval init`** — same idea as `quickstart`, but asks you everything yourself
+(task name, prompt variants, test cases, rubric) instead of generating any of it,
+and saves it as a real input file you can run or edit later:
 
 ```bash
-prompteval improve --judge-model groq/llama-3.3-70b-versatile
+prompteval init my_task.json
+prompteval run my_task.json --judge-model groq/llama-3.3-70b-versatile
 ```
-
-It only asks for your prompt (again using `{input}` as the placeholder) — no
-separate context question; the prompt's own wording is enough to generate
-realistic test scenarios. Saves the score, reasoning, rewritten prompt, and every
-test case's real output to a markdown file afterward.
 
 ## Run it
 
