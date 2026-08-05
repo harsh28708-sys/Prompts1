@@ -12,6 +12,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic import ValidationError
 
+from promteval.critique import generate_critique, write_critique_report
 from promteval.executor import DEFAULT_CONCURRENCY, DEFAULT_TIMEOUT_S, execute_matrix
 from promteval.generator import GenerationError
 from promteval.judge import judge_call_result
@@ -22,9 +23,15 @@ from promteval.reporter import (
     write_json_report,
     write_markdown_report,
 )
-from promteval.schemas import EvalRun, RunReport
+from promteval.schemas import EvalRun, PromptVariant, RunReport, TestCase
 from promteval.scoring import build_run_report
-from promteval.wizard import DEFAULT_MODEL, run_init_wizard, run_quickstart_wizard
+from promteval.wizard import (
+    DEFAULT_MODEL,
+    QUICKSTART_VARIABLE,
+    run_improve_wizard,
+    run_init_wizard,
+    run_quickstart_wizard,
+)
 
 DEFAULT_JUDGE_MODEL = "gemini/gemini-2.0-flash"
 
@@ -40,10 +47,15 @@ NEW HERE? JUST RUN:
 It will ask you everything it needs, right there in the terminal: a task, then
 3 prompts to compare. No files to write, no setup beyond an API key (below).
 
-THE THREE WAYS TO USE IT
+THE WAYS TO USE IT
     prompteval                     Fastest way to try it out. AI makes up a
     (same as `prompteval quickstart`)  task and test data for you; you just
                                     write 3 prompts. Runs immediately.
+
+    prompteval improve             Got ONE prompt and want it better? AI tests
+                                    it against a few realistic scenarios and
+                                    gives you plain-English feedback -- not a
+                                    score, actual suggestions to improve it.
 
     prompteval init <file>         Answer the same kind of questions, but SAVE
                                     them to a file you can reuse or edit later.
@@ -143,6 +155,27 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Per-call timeout in seconds (default: {DEFAULT_TIMEOUT_S}).",
     )
 
+    improve_parser = subparsers.add_parser(
+        "improve",
+        help="Submit ONE prompt + context; AI tests it against generated scenarios and gives plain-English feedback.",
+    )
+    improve_parser.add_argument(
+        "--model", default=DEFAULT_MODEL,
+        help=f"Model used to generate scenarios and run the prompt (default: {DEFAULT_MODEL}).",
+    )
+    improve_parser.add_argument(
+        "--judge-model", default=None,
+        help="Model used to write the critique (default: same as --model).",
+    )
+    improve_parser.add_argument(
+        "--concurrency", type=int, default=DEFAULT_CONCURRENCY,
+        help=f"Max concurrent LLM calls (default: {DEFAULT_CONCURRENCY}).",
+    )
+    improve_parser.add_argument(
+        "--timeout", type=float, default=DEFAULT_TIMEOUT_S,
+        help=f"Per-call timeout in seconds (default: {DEFAULT_TIMEOUT_S}).",
+    )
+
     return parser
 
 
@@ -159,7 +192,7 @@ async def run_pipeline(run: EvalRun, judge_model: str, concurrency: int, timeout
     return build_run_report(run, raw_results, list(judge_results))
 
 
-_SUBCOMMANDS = {"run", "init", "quickstart"}
+_SUBCOMMANDS = {"run", "init", "quickstart", "improve"}
 _HELP_TOKENS = {"/help", "help", "-h", "--help"}
 
 
@@ -181,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
         argv = ["quickstart", *argv]
     args = build_parser().parse_args(argv)
 
-    if args.command in ("run", "quickstart") and not _has_any_api_key():
+    if args.command in ("run", "quickstart", "improve") and not _has_any_api_key():
         print(NO_API_KEY_MESSAGE, file=sys.stderr)
         return 1
 
@@ -191,6 +224,46 @@ def main(argv: list[str] | None = None) -> int:
         output_path.write_text(json.dumps(run.model_dump(), indent=2), encoding="utf-8")
         print(f"\nSaved to: {output_path}")
         print(f"Run it with: prompteval run {output_path}")
+        return 0
+
+    if args.command == "improve":
+        try:
+            context, prompt_template, scenario_values = asyncio.run(run_improve_wizard(args.model))
+        except GenerationError as exc:
+            print(f"\nError: {exc}", file=sys.stderr)
+            return 1
+
+        run = EvalRun(
+            task_name=f"Prompt feedback: {context}",
+            models=[args.model],
+            prompt_variants=[PromptVariant(id="v1", name="Your prompt", template=prompt_template)],
+            test_cases=[
+                TestCase(id=f"tc{i}", variables={QUICKSTART_VARIABLE: v})
+                for i, v in enumerate(scenario_values, start=1)
+            ],
+            judge_criteria="n/a",  # unused -- improve mode critiques instead of scoring
+        )
+
+        try:
+            rendered = render_matrix(run)
+        except TemplateRenderError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+
+        raw_results = asyncio.run(
+            execute_matrix(rendered, run.models, concurrency=args.concurrency, timeout=args.timeout)
+        )
+
+        judge_model = args.judge_model or args.model
+        try:
+            critique = asyncio.run(generate_critique(context, prompt_template, raw_results, judge_model))
+        except GenerationError as exc:
+            print(f"\nError: {exc}", file=sys.stderr)
+            return 1
+
+        print("\n" + critique)
+        feedback_path = write_critique_report(context, prompt_template, raw_results, critique)
+        print(f"\nFeedback saved to: {feedback_path}")
         return 0
 
     if args.command == "quickstart":

@@ -14,6 +14,9 @@ DEFAULT_JUDGE_CRITERIA = "Score 1-5 on accuracy, clarity, and completeness."
 # into whatever 3 prompts the user writes, without needing to infer it after the fact.
 QUICKSTART_VARIABLE = "input"
 
+# `improve` reuses the same placeholder convention for the one prompt being critiqued.
+IMPROVE_SCENARIO_COUNT = 3
+
 _VARIABLE_RE = re.compile(r"\{(\w+)\}")
 
 
@@ -90,6 +93,29 @@ def run_init_wizard() -> EvalRun:
         test_cases=test_cases,
         judge_criteria=judge_criteria,
     )
+
+
+async def run_improve_wizard(model: str) -> tuple[str, str, list[str]]:
+    """Asks for the situation's context and ONE prompt (not multiple variants),
+    then AI-generates a few realistic scenarios to actually test it against.
+    Returns (context, prompt_template, scenario_values) -- the caller runs the
+    prompt for real and gets a written critique back, not a 1-5 score."""
+    print("Let's get feedback on your prompt.\n")
+
+    context = _prompt("What's the context? (e.g. 'A customer support bot that summarizes tickets')")
+
+    placeholder = "{" + QUICKSTART_VARIABLE + "}"
+    prompt_template = _prompt(f"\nYour prompt (use {placeholder} where the real input goes)")
+    if placeholder not in prompt_template:
+        print(f"  Warning: this doesn't include {placeholder} -- it'll run the exact same way every time.")
+
+    print(f"\nGenerating {IMPROVE_SCENARIO_COUNT} sample scenarios for this context...")
+    scenario_values = await generate_test_cases(context, model, n=IMPROVE_SCENARIO_COUNT)
+    print("Generated scenarios:")
+    for i, value in enumerate(scenario_values, start=1):
+        print(f"  {i}. {value}")
+
+    return context, prompt_template, scenario_values
 
 
 async def run_quickstart_wizard(model: str) -> EvalRun:

@@ -210,6 +210,32 @@ def test_main_quickstart_runs_immediately_without_a_separate_run_command(tmp_pat
     assert list(tmp_path.glob("Quickstart_demo_*.json"))  # the timestamped report
 
 
+def test_main_improve_runs_immediately_and_saves_written_feedback(tmp_path, monkeypatch, capsys):
+    # In plain terms: `improve` should test the one prompt for real and print a
+    # written critique -- not a score, not a ranked table.
+    canned_answers = ("A customer support bot", "Summarize: {input}", ["msg one", "msg two", "msg three"])
+    monkeypatch.setattr(cli_module, "run_improve_wizard", AsyncMock(return_value=canned_answers))
+    monkeypatch.setattr(litellm, "acompletion", AsyncMock(return_value=fake_llm_response("Solid start. Try being more specific about tone.")))
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = main(["improve", "--judge-model", "groq/llama-3.3-70b-versatile"])
+
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert "Solid start. Try being more specific about tone." in out
+    assert "Feedback saved to:" in out
+    assert list(tmp_path.glob("A_customer_support_bot_feedback_*.md"))
+
+
+def test_main_improve_reports_generation_failure_cleanly(monkeypatch, capsys):
+    monkeypatch.setattr(cli_module, "run_improve_wizard", AsyncMock(side_effect=GenerationError("model unavailable")))
+
+    exit_code = main(["improve"])
+
+    assert exit_code == 1
+    assert "model unavailable" in capsys.readouterr().err
+
+
 def test_main_with_no_args_defaults_to_quickstart(tmp_path, monkeypatch):
     canned_run = EvalRun(
         task_name="No args demo",

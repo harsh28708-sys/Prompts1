@@ -7,7 +7,13 @@ functions get their own dedicated tests in test_generator.py."""
 from unittest.mock import AsyncMock
 
 import promteval.wizard as wizard_module
-from promteval.wizard import _prompt, _prompt_yes_no, run_init_wizard, run_quickstart_wizard
+from promteval.wizard import (
+    _prompt,
+    _prompt_yes_no,
+    run_improve_wizard,
+    run_init_wizard,
+    run_quickstart_wizard,
+)
 
 
 def scripted_input(monkeypatch, answers: list[str]):
@@ -133,4 +139,31 @@ async def test_quickstart_warns_but_does_not_fail_when_placeholder_missing(monke
     run = await run_quickstart_wizard("groq/llama-3.3-70b-versatile")
 
     assert len(run.prompt_variants) == 3
+    assert "Warning" in capsys.readouterr().out
+
+
+async def test_improve_wizard_returns_context_prompt_and_scenarios(monkeypatch):
+    generate_cases_mock = AsyncMock(return_value=["scenario one", "scenario two", "scenario three"])
+    monkeypatch.setattr(wizard_module, "generate_test_cases", generate_cases_mock)
+
+    answers = ["A customer support bot", "Summarize: {input}"]
+    scripted_input(monkeypatch, answers)
+
+    context, prompt_template, scenarios = await run_improve_wizard("groq/llama-3.3-70b-versatile")
+
+    assert context == "A customer support bot"
+    assert prompt_template == "Summarize: {input}"
+    assert scenarios == ["scenario one", "scenario two", "scenario three"]
+    # the context itself becomes the "task" description fed into scenario generation
+    generate_cases_mock.assert_awaited_once_with(context, "groq/llama-3.3-70b-versatile", n=3)
+
+
+async def test_improve_wizard_warns_but_does_not_fail_when_placeholder_missing(monkeypatch, capsys):
+    monkeypatch.setattr(wizard_module, "generate_test_cases", AsyncMock(return_value=["a", "b", "c"]))
+    answers = ["Some context", "A prompt with no placeholder at all"]
+    scripted_input(monkeypatch, answers)
+
+    _context, prompt_template, _scenarios = await run_improve_wizard("groq/llama-3.3-70b-versatile")
+
+    assert prompt_template == "A prompt with no placeholder at all"
     assert "Warning" in capsys.readouterr().out
