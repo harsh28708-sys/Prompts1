@@ -44,13 +44,15 @@ async def generate_test_cases(task: str, model: str, n: int = 5) -> list[str]:
         f"Generate {n} diverse, realistic example inputs a real user would provide for this task. "
         f"Return ONLY a JSON array of exactly {n} strings, no other text, no markdown fences."
     )
+    last_error: str | None = None
 
     for _ in range(2):  # 1 initial attempt + 1 retry, matching the judge's parse-retry pattern
         try:
             response = await litellm.acompletion(
                 model=model, messages=[{"role": "user", "content": prompt}], temperature=0.9
             )
-        except Exception:  # noqa: BLE001 -- a failed attempt just triggers the retry below
+        except Exception as exc:  # noqa: BLE001 -- a failed attempt just triggers the retry below
+            last_error = str(exc)
             prompt += "\n\n(The previous attempt failed to respond -- please try again.)"
             continue
 
@@ -64,4 +66,9 @@ async def generate_test_cases(task: str, model: str, n: int = 5) -> list[str]:
                 pass
         prompt += "\n\nReturn ONLY a valid JSON array of strings, nothing else."
 
-    raise GenerationError(f"couldn't get {n} valid test cases from the model after 2 attempts")
+    if last_error:
+        raise GenerationError(f"couldn't get {n} valid test cases from the model: {last_error}")
+    raise GenerationError(
+        f"couldn't get {n} valid test cases from the model after 2 attempts -- "
+        "it kept responding with something that wasn't a clean JSON array of strings"
+    )

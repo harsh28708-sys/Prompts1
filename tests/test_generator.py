@@ -81,6 +81,22 @@ async def test_generate_test_cases_wrong_length_is_treated_as_invalid(monkeypatc
     assert result == ["a", "b", "c", "d", "e"]
 
 
+async def test_generate_test_cases_call_failure_surfaces_the_real_reason(monkeypatch):
+    # In plain terms: if every attempt fails because the AI call itself errors out
+    # (rate limit, quota, bad API key -- not just a malformed response), the error
+    # shown to the user should say *why*, not just "couldn't get valid test cases".
+    monkeypatch.setattr(
+        generator_module.litellm, "acompletion",
+        AsyncMock(side_effect=RuntimeError("quota exceeded")),
+    )
+
+    try:
+        await generate_test_cases("some task", MODEL, n=5)
+        raise AssertionError("expected GenerationError")
+    except GenerationError as exc:
+        assert "quota exceeded" in str(exc)
+
+
 async def test_generate_test_cases_gives_up_after_two_bad_attempts(monkeypatch):
     monkeypatch.setattr(
         generator_module.litellm, "acompletion",
