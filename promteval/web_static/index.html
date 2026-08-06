@@ -235,18 +235,9 @@
       <label for="improve-prompt">Your prompt <span class="hint">&mdash; use <code>{input}</code> where the real data goes</span></label>
       <textarea id="improve-prompt" placeholder="Summarize this customer message in one sentence: {input}"></textarea>
 
-      <div class="row">
-        <div>
-          <label for="improve-model">Model</label>
-          <select id="improve-model"></select>
-          <input type="text" class="custom-model hidden" id="improve-model-custom" placeholder="e.g. groq/llama-3.1-8b-instant" />
-        </div>
-        <div>
-          <label for="improve-judge-model">Judge model <span class="hint">(optional)</span></label>
-          <select id="improve-judge-model"></select>
-          <input type="text" class="custom-model hidden" id="improve-judge-model-custom" placeholder="e.g. groq/llama-3.1-8b-instant" />
-        </div>
-      </div>
+      <label for="improve-model">Model</label>
+      <select id="improve-model"></select>
+      <input type="text" class="custom-model hidden" id="improve-model-custom" placeholder="e.g. groq/llama-3.1-8b-instant" />
 
       <button class="run-btn" id="improve-run">Test My Prompt</button>
 
@@ -412,7 +403,6 @@ function getModelValue(selectId, customId) {
 }
 
 initModelSelect("improve-model", "improve-model-custom", false);
-initModelSelect("improve-judge-model", "improve-judge-model-custom", true);
 initModelSelect("compare-model", "compare-model-custom", false);
 initModelSelect("compare-judge-model", "compare-judge-model-custom", true);
 
@@ -464,7 +454,6 @@ $("improve-run").addEventListener("click", async () => {
     const data = await callApi("/api/improve", {
       prompt,
       model: getModelValue("improve-model", "improve-model-custom") || DEFAULT_MODEL_VALUE,
-      judge_model: getModelValue("improve-judge-model", "improve-judge-model-custom") || null,
     });
 
     $("improve-scenarios").innerHTML = data.scenarios

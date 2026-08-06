@@ -172,10 +172,13 @@ browser tab doesn't stop it (Ctrl+C in the terminal does). Options:
 If no API key is configured yet, the page itself shows a warning banner
 instead of the terminal's message — everything else works the same way.
 
-Model and judge model are dropdowns grouped by provider (Groq, Gemini,
-OpenRouter, Claude) — no need to remember or type the exact `provider/model-name`
-string. Pick **"Custom model string…"** at the bottom of either dropdown if you
-want to type one in by hand instead (e.g. a newer model not in the list yet).
+Model is a dropdown grouped by provider (Groq, Gemini, OpenRouter, Claude) —
+no need to remember or type the exact `provider/model-name` string. Pick
+**"Custom model string…"** at the bottom if you want to type one in by hand
+instead (e.g. a newer model not in the list yet). The Improve tab uses that
+one model to both run and judge your prompt — no separate judge model to pick
+there; Compare still has an optional Judge model dropdown, since comparing
+several prompts benefits more from a second, unbiased opinion.
 
 **`prompteval init`** — same idea as `quickstart`, but asks you everything yourself
 (task name, prompt variants, test cases, rubric) instead of generating any of it,
