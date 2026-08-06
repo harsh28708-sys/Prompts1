@@ -98,7 +98,14 @@
     box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15);
   }
   textarea { min-height: 78px; }
-  select { appearance: none; cursor: pointer; }
+  select {
+    appearance: none; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath fill='%238b90ab' d='M1 1l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px;
+  }
+  select option { background: #171b30; color: var(--text); }
+  .custom-model { margin-top: 8px; }
+  .hidden { display: none !important; }
 
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   .prompt-block { border-top: 1px dashed var(--card-border); padding-top: 14px; margin-top: 14px; }
@@ -231,11 +238,13 @@
       <div class="row">
         <div>
           <label for="improve-model">Model</label>
-          <input type="text" id="improve-model" value="groq/llama-3.3-70b-versatile" />
+          <select id="improve-model"></select>
+          <input type="text" class="custom-model hidden" id="improve-model-custom" placeholder="e.g. groq/llama-3.1-8b-instant" />
         </div>
         <div>
           <label for="improve-judge-model">Judge model <span class="hint">(optional)</span></label>
-          <input type="text" id="improve-judge-model" placeholder="Same as model above" />
+          <select id="improve-judge-model"></select>
+          <input type="text" class="custom-model hidden" id="improve-judge-model-custom" placeholder="e.g. groq/llama-3.1-8b-instant" />
         </div>
       </div>
 
@@ -284,11 +293,13 @@
       <div class="row">
         <div>
           <label for="compare-model">Model</label>
-          <input type="text" id="compare-model" value="groq/llama-3.3-70b-versatile" />
+          <select id="compare-model"></select>
+          <input type="text" class="custom-model hidden" id="compare-model-custom" placeholder="e.g. groq/llama-3.1-8b-instant" />
         </div>
         <div>
           <label for="compare-judge-model">Judge model <span class="hint">(optional)</span></label>
-          <input type="text" id="compare-judge-model" placeholder="Same as model above" />
+          <select id="compare-judge-model"></select>
+          <input type="text" class="custom-model hidden" id="compare-judge-model-custom" placeholder="e.g. groq/llama-3.1-8b-instant" />
         </div>
       </div>
 
@@ -325,6 +336,85 @@ document.querySelectorAll(".tab").forEach((tab) => {
     $("panel-" + tab.dataset.tab).classList.add("active");
   });
 });
+
+// --- Model dropdowns ---
+// Curated, working provider/model strings (LiteLLM's "provider/model-name"
+// format) grouped by which free API key unlocks them. "Custom" always stays
+// available underneath, for anyone who wants to type an exact model string.
+const MODEL_GROUPS = [
+  {
+    label: "Groq — free",
+    options: [
+      { value: "groq/llama-3.3-70b-versatile", label: "Llama 3.3 70B (recommended)" },
+      { value: "groq/llama-3.1-8b-instant", label: "Llama 3.1 8B (fastest)" },
+      { value: "groq/gemma2-9b-it", label: "Gemma 2 9B" },
+    ],
+  },
+  {
+    label: "Gemini — free",
+    options: [
+      { value: "gemini/gemini-2.0-flash", label: "Gemini 2.0 Flash" },
+      { value: "gemini/gemini-1.5-flash", label: "Gemini 1.5 Flash" },
+    ],
+  },
+  {
+    label: "OpenRouter — free",
+    options: [
+      { value: "openrouter/meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B" },
+      { value: "openrouter/anthropic/claude-3.5-sonnet", label: "Claude 3.5 Sonnet" },
+    ],
+  },
+  {
+    label: "Claude — paid",
+    options: [
+      { value: "anthropic/claude-sonnet-5", label: "Claude Sonnet 5" },
+      { value: "anthropic/claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 (cheaper)" },
+      { value: "anthropic/claude-opus-5", label: "Claude Opus 5 (most capable)" },
+    ],
+  },
+];
+const DEFAULT_MODEL_VALUE = "groq/llama-3.3-70b-versatile";
+const CUSTOM_VALUE = "__custom__";
+
+function buildModelOptionsHtml(withSameAsAboveOption) {
+  let html = withSameAsAboveOption ? `<option value="">Same as model above</option>` : "";
+  for (const group of MODEL_GROUPS) {
+    html += `<optgroup label="${escapeHtml(group.label)}">`;
+    for (const opt of group.options) {
+      html += `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`;
+    }
+    html += `</optgroup>`;
+  }
+  html += `<option value="${CUSTOM_VALUE}">Custom model string…</option>`;
+  return html;
+}
+
+function initModelSelect(selectId, customId, withSameAsAboveOption) {
+  const select = $(selectId);
+  const customInput = $(customId);
+  select.innerHTML = buildModelOptionsHtml(withSameAsAboveOption);
+  if (!withSameAsAboveOption) select.value = DEFAULT_MODEL_VALUE;
+
+  const sync = () => {
+    const isCustom = select.value === CUSTOM_VALUE;
+    customInput.classList.toggle("hidden", !isCustom);
+  };
+  select.addEventListener("change", sync);
+  sync();
+}
+
+// Returns "" (meaning "unset" / "same as model above") when a judge select is
+// left on its default, otherwise the chosen model string (typed-in if Custom).
+function getModelValue(selectId, customId) {
+  const select = $(selectId);
+  if (select.value === CUSTOM_VALUE) return $(customId).value.trim();
+  return select.value;
+}
+
+initModelSelect("improve-model", "improve-model-custom", false);
+initModelSelect("improve-judge-model", "improve-judge-model-custom", true);
+initModelSelect("compare-model", "compare-model-custom", false);
+initModelSelect("compare-judge-model", "compare-judge-model-custom", true);
 
 function scoreClass(score) {
   if (score >= 4) return "green";
@@ -373,8 +463,8 @@ $("improve-run").addEventListener("click", async () => {
   try {
     const data = await callApi("/api/improve", {
       prompt,
-      model: $("improve-model").value.trim() || "groq/llama-3.3-70b-versatile",
-      judge_model: $("improve-judge-model").value.trim() || null,
+      model: getModelValue("improve-model", "improve-model-custom") || DEFAULT_MODEL_VALUE,
+      judge_model: getModelValue("improve-judge-model", "improve-judge-model-custom") || null,
     });
 
     $("improve-scenarios").innerHTML = data.scenarios
@@ -422,8 +512,8 @@ $("compare-run").addEventListener("click", async () => {
     const data = await callApi("/api/quickstart", {
       task: $("compare-task").value.trim(),
       prompts,
-      model: $("compare-model").value.trim() || "groq/llama-3.3-70b-versatile",
-      judge_model: $("compare-judge-model").value.trim() || null,
+      model: getModelValue("compare-model", "compare-model-custom") || DEFAULT_MODEL_VALUE,
+      judge_model: getModelValue("compare-judge-model", "compare-judge-model-custom") || null,
     });
 
     $("compare-task-label").textContent = "Task: " + data.task_name;
