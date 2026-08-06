@@ -7,11 +7,18 @@ import asyncio
 import json
 import os
 import sys
+import warnings
 from pathlib import Path
 
 import questionary
 from dotenv import load_dotenv
 from pydantic import ValidationError
+
+# litellm's own internal async logging worker sometimes doesn't get cleanly
+# awaited before one of our short-lived asyncio.run() calls tears its event
+# loop down. Harmless (it never affects a real result) but noisy -- suppressed
+# by exact message text only, so it can't accidentally hide a real warning.
+warnings.filterwarnings("ignore", message="coroutine 'Logging.async_success_handler' was never awaited")
 
 from promteval.critique import generate_feedback, write_feedback_report
 from promteval.executor import DEFAULT_CONCURRENCY, DEFAULT_TIMEOUT_S, execute_matrix
