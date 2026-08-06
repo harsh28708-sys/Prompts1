@@ -9,6 +9,7 @@ dependencies = [
     "python-dotenv",
     "tenacity",
     "questionary",
+    "rich",
 ]
 
 [project.optional-dependencies]

@@ -6,6 +6,7 @@ import re
 
 from promteval.generator import generate_random_task, generate_test_cases
 from promteval.schemas import EvalRun, PromptVariant, TestCase
+from promteval.ui import console, print_scenarios, thinking
 
 DEFAULT_MODEL = "groq/llama-3.3-70b-versatile"
 DEFAULT_JUDGE_CRITERIA = "Score 1-5 on accuracy, clarity, and completeness."
@@ -120,11 +121,10 @@ async def run_improve_wizard(model: str) -> tuple[str, list[str]]:
     if placeholder not in prompt_template:
         print(f"  Warning: this doesn't include {placeholder} -- it'll run the exact same way every time.")
 
-    print(f"\nGenerating {IMPROVE_SCENARIO_COUNT} sample scenarios for this prompt...")
-    scenario_values = await generate_test_cases(prompt_template, model, n=IMPROVE_SCENARIO_COUNT)
-    print("Generated scenarios:")
-    for i, value in enumerate(scenario_values, start=1):
-        print(f"  {i}. {value}")
+    console.print()
+    with thinking(f"Generating {IMPROVE_SCENARIO_COUNT} sample scenarios"):
+        scenario_values = await generate_test_cases(prompt_template, model, n=IMPROVE_SCENARIO_COUNT)
+    print_scenarios(scenario_values)
 
     return prompt_template, scenario_values
 
@@ -138,15 +138,14 @@ async def run_quickstart_wizard(model: str) -> EvalRun:
     if task_input:
         task_name = task_input
     else:
-        print("\nThinking of a random task...")
-        task_name = await generate_random_task(model)
-        print(f"Task: {task_name}")
+        with thinking("Thinking of a random task"):
+            task_name = await generate_random_task(model)
+        console.print(f"Task: [bold]{task_name}[/bold]")
 
-    print(f"\nGenerating 5 test cases for '{task_name}'...")
-    test_case_values = await generate_test_cases(task_name, model, n=5)
-    print("Generated test cases:")
-    for i, value in enumerate(test_case_values, start=1):
-        print(f"  {i}. {value}")
+    console.print()
+    with thinking("Generating 5 test cases"):
+        test_case_values = await generate_test_cases(task_name, model, n=5)
+    print_scenarios(test_case_values)
 
     placeholder = "{" + QUICKSTART_VARIABLE + "}"
     print(f"\nNow enter your 3 prompts to test. Use {placeholder} where the test data goes.\n")

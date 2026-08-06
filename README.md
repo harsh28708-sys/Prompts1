@@ -2,7 +2,8 @@
 
 A CLI tool for testing prompts against real LLMs. Give it one prompt and it scores it
 and hands back a better version; give it several and it ranks them by quality, cost,
-and latency to recommend a winner.
+and latency to recommend a winner. Colored output, a live "thinking..." spinner while
+the AI works, and a real bordered table for ranked results (via [Rich](https://github.com/Textualize/rich)).
 
 > Not sure where to start? Once installed, run `prompteval /help` (or just `-h`) for
 > a friendly walkthrough right in your terminal — no need to read this whole file.

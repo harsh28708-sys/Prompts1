@@ -15,3 +15,4 @@ PBI-14 Add a double-click run button,Extra,PBI-14,A file you can double-click wi
 PBI-15 Make the best option the default,Extra,PBI-15,Just running the program with no arguments goes straight to Improve,0.5,Wed 5 Aug,Done,Typing only 'prompteval' asks for your prompt immediately.
 PBI-16 Add a menu,Extra,PBI-16,Pick what to do from a list instead of typing a command name,3.5,Thu 6 Aug,Done,"The menu shows real options, works in every terminal, and explains itself when asked."
 PBI-17 Support Claude,Extra,PBI-17,Let the tool use Anthropic's Claude models too,0.5,Fri 7 Aug,Done,The tool recognizes a Claude key and can send it real requests.
+PBI-18 Make it look nicer,Extra,PBI-18,"Add color, a spinner while the AI is thinking, and a real bordered results table",2.5,Fri 7 Aug,Done,"The score is colored by how good it is, a spinner shows during real AI calls instead of a silent pause, and results appear in a proper table with the winner highlighted."

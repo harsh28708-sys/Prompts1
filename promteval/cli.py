@@ -18,14 +18,18 @@ from promteval.executor import DEFAULT_CONCURRENCY, DEFAULT_TIMEOUT_S, execute_m
 from promteval.generator import GenerationError
 from promteval.judge import judge_call_result
 from promteval.renderer import TemplateRenderError, render_matrix
-from promteval.reporter import (
-    format_table,
-    safe_filename_stub,
-    write_json_report,
-    write_markdown_report,
-)
+from promteval.reporter import safe_filename_stub, write_json_report, write_markdown_report
 from promteval.schemas import EvalRun, PromptVariant, RunReport, TestCase
 from promteval.scoring import build_run_report
+from promteval.ui import (
+    console,
+    err_console,
+    print_banner,
+    print_error,
+    print_feedback,
+    print_report_table,
+    thinking,
+)
 from promteval.wizard import (
     DEFAULT_MODEL,
     QUICKSTART_VARIABLE,
@@ -196,10 +200,14 @@ async def run_pipeline(run: EvalRun, judge_model: str, concurrency: int, timeout
     # phases together never exceed `concurrency` calls in flight -- not `concurrency`
     # execution calls followed by an unthrottled burst of judge calls on top.
     semaphore = asyncio.Semaphore(concurrency)
-    raw_results = await execute_matrix(rendered, run.models, concurrency=concurrency, timeout=timeout, semaphore=semaphore)
-    judge_results = await asyncio.gather(
-        *[judge_call_result(r, run.judge_criteria, judge_model, semaphore) for r in raw_results]
-    )
+    with thinking(f"Running {len(rendered)} prompt(s) against {', '.join(run.models)}"):
+        raw_results = await execute_matrix(
+            rendered, run.models, concurrency=concurrency, timeout=timeout, semaphore=semaphore
+        )
+    with thinking("Judging the results"):
+        judge_results = await asyncio.gather(
+            *[judge_call_result(r, run.judge_criteria, judge_model, semaphore) for r in raw_results]
+        )
     return build_run_report(run, raw_results, list(judge_results))
 
 
@@ -283,6 +291,7 @@ def _run_interactive_menu(existing_argv: list[str]) -> list[str] | None:
     e.g. `prompteval --judge-model x` still applies whatever gets picked), or
     None if the user chose to exit (or hit Ctrl+C/Esc, which questionary also
     reports as None)."""
+    print_banner()
     while True:
         choice = _ask_select("What do you want to do?", _MENU_CHOICES)
 
@@ -331,22 +340,22 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     if args.command in ("run", "quickstart", "improve") and not _has_any_api_key():
-        print(NO_API_KEY_MESSAGE, file=sys.stderr)
+        err_console.print(NO_API_KEY_MESSAGE)
         return 1
 
     if args.command == "init":
         run = run_init_wizard()
         output_path = Path(args.output_file) if args.output_file else Path(f"{safe_filename_stub(run.task_name)}.json")
         output_path.write_text(json.dumps(run.model_dump(), indent=2), encoding="utf-8")
-        print(f"\nSaved to: {output_path}")
-        print(f"Run it with: prompteval run {output_path}")
+        console.print(f"\n[bold green]Saved[/bold green] to: {output_path}")
+        console.print(f"Run it with: [cyan]prompteval run {output_path}[/cyan]")
         return 0
 
     if args.command == "improve":
         try:
             prompt_template, scenario_values = asyncio.run(run_improve_wizard(args.model))
         except GenerationError as exc:
-            print(f"\nError: {exc}", file=sys.stderr)
+            print_error(str(exc))
             return 1
 
         run = EvalRun(
@@ -363,50 +372,49 @@ def main(argv: list[str] | None = None) -> int:
         try:
             rendered = render_matrix(run)
         except TemplateRenderError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
+            print_error(str(exc))
             return 1
 
-        raw_results = asyncio.run(
-            execute_matrix(rendered, run.models, concurrency=args.concurrency, timeout=args.timeout)
-        )
+        with thinking("Running your prompt"):
+            raw_results = asyncio.run(
+                execute_matrix(rendered, run.models, concurrency=args.concurrency, timeout=args.timeout)
+            )
 
         judge_model = args.judge_model or args.model
         try:
-            feedback = asyncio.run(generate_feedback(prompt_template, raw_results, judge_model))
+            with thinking("Scoring and rewriting your prompt"):
+                feedback = asyncio.run(generate_feedback(prompt_template, raw_results, judge_model))
         except GenerationError as exc:
-            print(f"\nError: {exc}", file=sys.stderr)
+            print_error(str(exc))
             return 1
 
-        print(f"\nScore: {feedback.score}/5")
-        print(feedback.reasoning)
-        print("\nImproved prompt:")
-        print(feedback.improved_prompt)
+        print_feedback(feedback)
 
         feedback_path = write_feedback_report(prompt_template, raw_results, feedback)
-        print(f"\nFeedback saved to: {feedback_path}")
+        console.print(f"\n[dim]Feedback saved to:[/dim] {feedback_path}")
         return 0
 
     if args.command == "quickstart":
         try:
             run = asyncio.run(run_quickstart_wizard(args.model))
         except GenerationError as exc:
-            print(f"\nError: {exc}", file=sys.stderr)
+            print_error(str(exc))
             return 1
 
         input_path = Path(f"{safe_filename_stub(run.task_name)}.json")
         input_path.write_text(json.dumps(run.model_dump(), indent=2), encoding="utf-8")
-        print(f"\nSaved input file to: {input_path} (re-run it later with `prompteval run {input_path}`)\n")
+        console.print(f"\n[dim]Saved input file to:[/dim] {input_path} (re-run it later with `prompteval run {input_path}`)\n")
 
         judge_model = args.judge_model or args.model
         try:
             report = asyncio.run(run_pipeline(run, judge_model, args.concurrency, args.timeout))
         except TemplateRenderError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
+            print_error(str(exc))
             return 1
 
-        print(format_table(report))
+        print_report_table(report)
         report_path = write_json_report(report)
-        print(f"\nReport written to: {report_path}")
+        console.print(f"\n[dim]Report written to:[/dim] {report_path}")
         return 0
 
     if args.command != "run":
@@ -416,25 +424,27 @@ def main(argv: list[str] | None = None) -> int:
         with open(args.input_file, encoding="utf-8") as f:
             run = EvalRun(**json.load(f))
     except FileNotFoundError:
-        print(f"Error: input file not found: {args.input_file}", file=sys.stderr)
+        print_error(f"input file not found: {args.input_file}")
         return 1
     except json.JSONDecodeError as exc:
-        print(f"Error: {args.input_file} is not valid JSON: {exc}", file=sys.stderr)
+        print_error(f"{args.input_file} is not valid JSON: {exc}")
         return 1
     except ValidationError as exc:
-        print(f"Error: {args.input_file} doesn't match the expected EvalRun format:\n{exc}", file=sys.stderr)
+        print_error(f"{args.input_file} doesn't match the expected EvalRun format:\n{exc}")
         return 1
 
     try:
         report = asyncio.run(run_pipeline(run, args.judge_model, args.concurrency, args.timeout))
     except TemplateRenderError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
+        print_error(str(exc))
         return 1
 
-    print(format_table(report))
-    write_fn = write_markdown_report if args.format == "markdown" else write_json_report
-    path = write_fn(report)
-    print(f"\nReport written to: {path}")
+    print_report_table(report)
+    if args.format == "markdown":
+        path = write_markdown_report(report)
+    else:
+        path = write_json_report(report)
+    console.print(f"\n[dim]Report written to:[/dim] {path}")
     return 0
 
 
