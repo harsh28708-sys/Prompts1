@@ -64,17 +64,18 @@ you'll see an arrow-key menu instead of needing to know a command name:
 
 ```
 ? What do you want to do?
-❯ Improve one prompt (score + rewrite)
-  Compare 3 prompts against AI-generated test data
-  Build a reusable input file
-  Run an existing input file
-  Help
+❯ Improve one prompt (get a score + a better version)
+  Compare 3 prompts (AI makes up the test data)
+  Save a prompt comparison to a file for later (doesn't run yet)
+  Run a prompt comparison file you already have
+  Help -- what do these options actually mean?
   Exit
 ```
 
 Use ↑/↓ and Enter to pick. Any flags you already typed still apply to whatever you
 pick, e.g. `prompteval --judge-model groq/llama-3.3-70b-versatile` shows the menu
-and applies that flag to whichever option you choose.
+and applies that flag to whichever option you choose. Picking **Help** explains
+each option in plain terms (not the full install guide — that's `prompteval /help`).
 
 > Some terminals (Git Bash/mintty on Windows in particular) can't render the
 > arrow-key menu at all — it automatically falls back to a plain numbered list

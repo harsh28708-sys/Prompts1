@@ -349,14 +349,18 @@ def test_menu_init_choice_with_a_filename_includes_it(monkeypatch):
     assert result == ["init", "saved.json"]
 
 
-def test_menu_help_choice_prints_help_then_loops_back(monkeypatch, capsys):
+def test_menu_help_choice_prints_menu_specific_help_then_loops_back(monkeypatch, capsys):
+    # In plain terms: the menu's own Help option should explain what each menu
+    # choice actually does (not just repeat the general /help install guide).
     selects = iter(["help", "exit"])
     monkeypatch.setattr(cli_module.questionary, "select", lambda *a, **k: fake_ask(next(selects)))
 
     result = cli_module._run_interactive_menu([])
 
     assert result is None
-    assert "NEW HERE?" in capsys.readouterr().out  # HELP_TEXT content
+    out = capsys.readouterr().out
+    assert "SAVE A PROMPT COMPARISON TO A FILE FOR LATER" in out
+    assert "RUN A PROMPT COMPARISON FILE YOU ALREADY HAVE" in out
 
 
 def test_menu_exit_choice_returns_none(monkeypatch):

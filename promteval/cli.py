@@ -202,13 +202,40 @@ _SUBCOMMANDS = {"run", "init", "quickstart", "improve"}
 _HELP_TOKENS = {"/help", "help", "-h", "--help"}
 
 _MENU_CHOICES = [
-    questionary.Choice("Improve one prompt (score + rewrite)", value="improve"),
-    questionary.Choice("Compare 3 prompts against AI-generated test data", value="quickstart"),
-    questionary.Choice("Build a reusable input file", value="init"),
-    questionary.Choice("Run an existing input file", value="run"),
-    questionary.Choice("Help", value="help"),
+    questionary.Choice("Improve one prompt (get a score + a better version)", value="improve"),
+    questionary.Choice("Compare 3 prompts (AI makes up the test data)", value="quickstart"),
+    questionary.Choice("Save a prompt comparison to a file for later (doesn't run yet)", value="init"),
+    questionary.Choice("Run a prompt comparison file you already have", value="run"),
+    questionary.Choice("Help -- what do these options actually mean?", value="help"),
     questionary.Choice("Exit", value="exit"),
 ]
+
+MENU_HELP_TEXT = """
+Here's what each option on the menu actually does:
+
+IMPROVE ONE PROMPT
+  You have ONE prompt you're already using and want it to work better.
+  Type it in; the AI tests it on a few made-up examples and gives you
+  a score out of 5 plus a rewritten, better version to try instead.
+
+COMPARE 3 PROMPTS
+  You have several DIFFERENT versions of a prompt and want to know
+  which one is actually best. AI makes up a task and test messages,
+  you type in your 3 versions, and it ranks them against each other.
+
+SAVE A PROMPT COMPARISON TO A FILE FOR LATER
+  Same questions as "Compare 3 prompts", but instead of running it
+  right away, it just SAVES your answers to a file on your computer --
+  so you (or someone else) can run that exact same comparison again
+  later without retyping everything.
+
+RUN A PROMPT COMPARISON FILE YOU ALREADY HAVE
+  You already have a saved file (one you made with the option above,
+  or an example that came with this tool) and just want to run it --
+  no questions asked, straight to the results.
+
+For install/API-key setup instead, run `prompteval /help`.
+""".strip("\n")
 
 
 def _fallback_select(question: str, choices: list) -> str | None:
@@ -258,7 +285,7 @@ def _run_interactive_menu(existing_argv: list[str]) -> list[str] | None:
             return None
 
         if choice == "help":
-            print(HELP_TEXT)
+            print(MENU_HELP_TEXT)
             print()
             continue
 
