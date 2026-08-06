@@ -46,14 +46,18 @@ cp .env.example .env
 OPENROUTER_API_KEY=
 GEMINI_API_KEY=
 GROQ_API_KEY=
+ANTHROPIC_API_KEY=
 ```
 
 You only need a key for the provider(s) named in your input file's `models` list —
-you don't need all three. Get keys at:
+you don't need all four. Get keys at:
 
 - Groq: [console.groq.com/keys](https://console.groq.com/keys)
 - OpenRouter: [openrouter.ai/keys](https://openrouter.ai/keys)
 - Gemini: [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+- Claude: [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) — **no free
+  tier**, needs a paid credit balance before any call works (model strings look like
+  `anthropic/claude-sonnet-5`)
 
 `.env` is git-ignored — your keys never get committed.
 

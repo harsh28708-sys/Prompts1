@@ -106,6 +106,7 @@ def test_main_reports_missing_api_key_without_crashing(monkeypatch, capsys):
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
     exit_code = main(["run", "some_file.json"])
 

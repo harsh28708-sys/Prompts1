@@ -36,7 +36,7 @@ from promteval.wizard import (
 
 DEFAULT_JUDGE_MODEL = "gemini/gemini-2.0-flash"
 
-_API_KEY_VARS = ("OPENROUTER_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY")
+_API_KEY_VARS = ("OPENROUTER_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY", "ANTHROPIC_API_KEY")
 
 HELP_TEXT = """
 PromtEval -- test a prompt against a real AI and get a score plus a better
@@ -77,6 +77,10 @@ YOU NEED ONE FREE API KEY
     Copy .env.example to .env and paste your key in, e.g.:
         GROQ_API_KEY=your-key-here
 
+    Also supported (no free tier -- needs a paid balance):
+        Claude:     https://console.anthropic.com/settings/keys
+        Model strings look like: anthropic/claude-sonnet-5
+
     Also add --judge-model groq/llama-3.3-70b-versatile to whichever command
     you run -- the tool's built-in default judge needs Google billing set up,
     which most free accounts don't have.
@@ -97,6 +101,7 @@ Pick any one of these (all have a free tier):
     Groq:       https://console.groq.com/keys
     OpenRouter: https://openrouter.ai/keys
     Gemini:     https://aistudio.google.com/apikey
+    Claude:     https://console.anthropic.com/settings/keys (paid, no free tier)
 
 Then:
     1. Copy .env.example to .env (or create a .env file yourself)
