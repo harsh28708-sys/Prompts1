@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from promteval import history
 from promteval.config import has_any_api_key
 from promteval.critique import generate_feedback
 from promteval.executor import DEFAULT_CONCURRENCY, execute_matrix
@@ -26,6 +27,7 @@ from promteval.wizard import DEFAULT_MODEL
 
 QUICKSTART_VARIABLE = "input"
 STATIC_DIR = Path(__file__).parent / "web_static"
+HISTORY_DB_PATH = history.DEFAULT_DB_PATH  # module-level so tests can point it at a tmp_path
 
 app = FastAPI(title="PromtEval")
 app.add_middleware(
@@ -92,12 +94,21 @@ async def api_improve(req: ImproveRequest) -> ImproveResponse:
     except GenerationError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    return ImproveResponse(
+    result = ImproveResponse(
         scenarios=scenario_values,
         score=feedback.score,
         reasoning=feedback.reasoning,
         improved_prompt=feedback.improved_prompt,
     )
+    history.save_run(
+        kind="improve",
+        summary=req.prompt,
+        model=req.model,
+        request=req.model_dump(),
+        response=result.model_dump(),
+        db_path=HISTORY_DB_PATH,
+    )
+    return result
 
 
 class QuickstartRequest(BaseModel):
@@ -163,7 +174,7 @@ async def api_quickstart(req: QuickstartRequest) -> QuickstartResponse:
     report = build_run_report(run, raw_results, list(judge_results))
 
     variant_names = {v.id: v.name for v in variants}
-    return QuickstartResponse(
+    result = QuickstartResponse(
         task_name=report.task_name,
         scenarios=scenario_values,
         variants=[
@@ -180,6 +191,61 @@ async def api_quickstart(req: QuickstartRequest) -> QuickstartResponse:
         recommended=report.recommended_variant_id,
         rationale=report.rationale,
     )
+    history.save_run(
+        kind="compare",
+        summary=task_name,
+        model=req.model,
+        request=req.model_dump(),
+        response=result.model_dump(),
+        db_path=HISTORY_DB_PATH,
+    )
+    return result
+
+
+class HistoryListItem(BaseModel):
+    id: int
+    kind: str
+    created_at: str
+    summary: str
+    model: str
+
+
+class HistoryDetail(HistoryListItem):
+    request: dict
+    response: dict
+
+
+@app.get("/api/history", response_model=list[HistoryListItem])
+async def api_history_list(limit: int = 50) -> list[HistoryListItem]:
+    entries = history.list_runs(limit=limit, db_path=HISTORY_DB_PATH)
+    return [
+        HistoryListItem(id=e.id, kind=e.kind, created_at=e.created_at, summary=e.summary, model=e.model)
+        for e in entries
+    ]
+
+
+@app.get("/api/history/{run_id}", response_model=HistoryDetail)
+async def api_history_detail(run_id: int) -> HistoryDetail:
+    entry = history.get_run(run_id, db_path=HISTORY_DB_PATH)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="History entry not found.")
+    return HistoryDetail(
+        id=entry.id, kind=entry.kind, created_at=entry.created_at, summary=entry.summary,
+        model=entry.model, request=entry.request, response=entry.response,
+    )
+
+
+@app.delete("/api/history/{run_id}")
+async def api_history_delete(run_id: int) -> dict:
+    if not history.delete_run(run_id, db_path=HISTORY_DB_PATH):
+        raise HTTPException(status_code=404, detail="History entry not found.")
+    return {"deleted": run_id}
+
+
+@app.delete("/api/history")
+async def api_history_clear() -> dict:
+    deleted_count = history.clear_history(db_path=HISTORY_DB_PATH)
+    return {"deleted_count": deleted_count}
 
 
 @app.get("/api/status")

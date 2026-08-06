@@ -133,6 +133,22 @@
   .variant-stats { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 5px; color: var(--subtle); font: 10px "DM Mono", monospace; }
   .variant-stats b { color: #dce3f7; font-weight: 500; }
   .rationale { margin-top: 15px; padding: 13px 14px; color: var(--muted); border-left: 2px solid var(--violet); background: rgba(139, 92, 246, .06); font-size: 12px; line-height: 1.65; }
+  .history-toolbar { display: flex; justify-content: flex-end; margin-bottom: 4px; }
+  .text-btn { padding: 6px 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; background: transparent; cursor: pointer; font: 700 11px "DM Mono", monospace; transition: color .15s, border .15s; }
+  .text-btn:hover { color: var(--red); border-color: rgba(251, 113, 133, .4); }
+  .history-empty { padding: 40px 10px; color: var(--subtle); text-align: center; font-size: 13px; }
+  .history-item { display: flex; align-items: center; gap: 13px; padding: 13px 14px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.025); cursor: pointer; transition: border .15s, background .15s; }
+  .history-item:hover { border-color: rgba(45, 212, 191, .4); background: rgba(45, 212, 191, .04); }
+  .history-kind { flex: 0 0 auto; padding: 4px 8px; border-radius: 6px; font: 800 9px "DM Mono", monospace; text-transform: uppercase; letter-spacing: .05em; }
+  .history-kind.improve { color: var(--cyan); background: rgba(45, 212, 191, .12); }
+  .history-kind.compare { color: #c8b6ff; background: rgba(139, 92, 246, .15); }
+  .history-item-info { min-width: 0; flex: 1; }
+  .history-summary { overflow: hidden; color: #dce3f7; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
+  .history-meta { margin-top: 3px; color: var(--subtle); font: 10px "DM Mono", monospace; }
+  .history-delete { flex: 0 0 auto; padding: 5px 9px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; background: transparent; cursor: pointer; font: 700 10px "DM Mono", monospace; }
+  .history-delete:hover { color: var(--red); border-color: rgba(251, 113, 133, .4); }
+  .history-back { margin-bottom: 16px; padding: 6px 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; background: transparent; cursor: pointer; font: 700 11px "DM Mono", monospace; }
+  .history-back:hover { color: var(--cyan); border-color: rgba(45, 212, 191, .4); }
   footer { display: flex; justify-content: space-between; align-items: center; padding: 22px 4px 0; color: var(--subtle); font: 10px "DM Mono", monospace; }
   footer span:last-child { color: #818bad; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -164,6 +180,7 @@
       <nav class="tabs" aria-label="Evaluation mode">
         <button class="tab active" type="button" data-tab="improve">Refine a prompt</button>
         <button class="tab" type="button" data-tab="compare">Compare prompts</button>
+        <button class="tab" type="button" data-tab="history">History</button>
       </nav>
       <div class="workspace-note">evaluation studio</div>
     </div>
@@ -201,6 +218,13 @@
           <p class="result-kicker">Head-to-head report</p><div class="section-label" id="compare-task-label">Task</div><div class="section-label">Generated test scenarios</div><div class="scenarios" id="compare-scenarios"></div><div class="section-label">Ranked results</div><div id="compare-variants"></div><div class="rationale" id="compare-rationale"></div>
         </div>
       </div>
+
+      <div class="panel" id="panel-history">
+        <div class="panel-intro"><div><h2 class="panel-title">Run history</h2><p class="panel-subtitle">Every completed Refine or Compare run, saved locally on this machine.</p></div><span class="step">03</span></div>
+        <div class="history-toolbar"><button class="text-btn" id="history-clear">Clear all</button></div>
+        <div id="history-list"></div>
+        <div id="history-detail" class="hidden"></div>
+      </div>
     </div>
   </section>
   <footer><span>PromtEval · runs locally in your browser</span><span>Your inputs stay with you, except for the AI calls you choose.</span></footer>
@@ -208,7 +232,7 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
-document.querySelectorAll(".tab").forEach((tab) => { tab.addEventListener("click", () => { document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active")); document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active")); tab.classList.add("active"); $("panel-" + tab.dataset.tab).classList.add("active"); }); });
+document.querySelectorAll(".tab").forEach((tab) => { tab.addEventListener("click", () => { document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active")); document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active")); tab.classList.add("active"); $("panel-" + tab.dataset.tab).classList.add("active"); if (tab.dataset.tab === "history") loadHistoryList(); }); });
 const MODEL_GROUPS = [{ label: "Groq — free", options: [{ value: "groq/llama-3.1-8b-instant", label: "Llama 3.1 8B (recommended — highest free limit)" }, { value: "groq/llama-3.3-70b-versatile", label: "Llama 3.3 70B (larger, lower limit)" }, { value: "groq/openai/gpt-oss-20b", label: "GPT-OSS 20B" }] }, { label: "Gemini — free", options: [{ value: "gemini/gemini-2.0-flash", label: "Gemini 2.0 Flash" }, { value: "gemini/gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite" }] }, { label: "OpenRouter — free", options: [{ value: "openrouter/openai/gpt-oss-20b:free", label: "GPT-OSS 20B" }, { value: "openrouter/google/gemma-4-26b-a4b-it:free", label: "Gemma 4 26B" }] }, { label: "Claude — paid", options: [{ value: "anthropic/claude-sonnet-5", label: "Claude Sonnet 5" }, { value: "anthropic/claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 (cheaper)" }, { value: "anthropic/claude-opus-5", label: "Claude Opus 5 (most capable)" }] }];
 const DEFAULT_MODEL_VALUE = "groq/llama-3.1-8b-instant", CUSTOM_VALUE = "__custom__";
 function buildModelOptionsHtml(same) { let html = same ? `<option value="">Same as evaluation model</option>` : ""; for (const group of MODEL_GROUPS) { html += `<optgroup label="${escapeHtml(group.label)}">`; for (const opt of group.options) html += `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`; html += "</optgroup>"; } return html + `<option value="${CUSTOM_VALUE}">Custom model string…</option>`; }
@@ -224,6 +248,60 @@ $("improve-copy").addEventListener("click", () => { navigator.clipboard.writeTex
 $("compare-run").addEventListener("click", async () => { const prompts = [$("compare-p1").value.trim(), $("compare-p2").value.trim(), $("compare-p3").value.trim()].filter(Boolean), btn = $("compare-run"), statusEl = $("compare-status"), statusText = $("compare-status-text"), errorEl = $("compare-error"), resultsEl = $("compare-results"); setError(errorEl, null); resultsEl.classList.remove("active"); if (prompts.length < 2) { setError(errorEl, "Add at least two prompts for a fair comparison."); return; } btn.disabled = true; setStatus(statusEl, statusText, "Generating a task and test data, then ranking every approach…", true); try { const data = await callApi("/api/quickstart", { task: $("compare-task").value.trim(), prompts, model: getModelValue("compare-model", "compare-model-custom") || DEFAULT_MODEL_VALUE, judge_model: getModelValue("compare-judge-model", "compare-judge-model-custom") || null }); $("compare-task-label").textContent = "Task · " + data.task_name; $("compare-scenarios").innerHTML = data.scenarios.map((s, i) => `<div class="scenario-item">0${i + 1} · ${escapeHtml(s)}</div>`).join(""); $("compare-variants").innerHTML = data.variants.map((v, i) => `<div class="variant-card ${v.is_winner ? "winner" : ""}"><div class="rank-badge">${i + 1}</div><div class="variant-info"><div class="variant-name">${escapeHtml(v.label)} ${v.is_winner ? '<span class="winner-tag">Winner</span>' : ""}</div><div class="variant-stats"><span>Quality <b>${v.quality.toFixed(2)}</b></span><span>Latency <b>${v.latency_ms.toFixed(0)}ms</b></span><span>Weighted <b>${v.weighted_score.toFixed(3)}</b></span></div></div></div>`).join(""); $("compare-rationale").textContent = data.rationale; resultsEl.classList.add("active"); } catch (err) { setError(errorEl, err.message); } finally { btn.disabled = false; setStatus(statusEl, statusText, "", false); } });
 function escapeHtml(str) { const div = document.createElement("div"); div.textContent = str; return div.innerHTML; }
 fetch("/api/status").then((r) => r.json()).then((data) => { if (!data.has_api_key) { const banner = document.createElement("div"); banner.className = "error-banner active"; banner.style.marginBottom = "20px"; banner.textContent = "No API key found. Copy .env.example to .env, add a real key, then restart the server."; document.querySelector(".card").prepend(banner); } }).catch(() => {});
+
+// --- History ---
+function formatWhen(iso) { const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString(); }
+async function loadHistoryList() {
+  $("history-detail").classList.add("hidden");
+  $("history-list").classList.remove("hidden");
+  const list = $("history-list");
+  list.innerHTML = `<div class="history-empty">Loading…</div>`;
+  let entries;
+  try { entries = await (await fetch("/api/history")).json(); } catch { entries = []; }
+  if (!entries.length) { list.innerHTML = `<div class="history-empty">No runs yet — Refine or Compare a prompt and it'll show up here.</div>`; return; }
+  list.innerHTML = entries.map((e) => `
+    <div class="history-item" data-id="${e.id}">
+      <span class="history-kind ${e.kind}">${e.kind}</span>
+      <div class="history-item-info"><div class="history-summary">${escapeHtml(e.summary)}</div><div class="history-meta">${formatWhen(e.created_at)} · ${escapeHtml(e.model)}</div></div>
+      <button class="history-delete" data-delete-id="${e.id}">Delete</button>
+    </div>`).join("");
+  list.querySelectorAll(".history-delete").forEach((btn) => btn.addEventListener("click", async (ev) => {
+    ev.stopPropagation();
+    await fetch(`/api/history/${btn.dataset.deleteId}`, { method: "DELETE" });
+    loadHistoryList();
+  }));
+  list.querySelectorAll(".history-item").forEach((item) => item.addEventListener("click", () => loadHistoryDetail(item.dataset.id)));
+}
+async function loadHistoryDetail(id) {
+  const detail = $("history-detail");
+  detail.classList.remove("hidden");
+  $("history-list").classList.add("hidden");
+  detail.innerHTML = `<div class="history-empty">Loading…</div>`;
+  let entry;
+  try { entry = await (await fetch(`/api/history/${id}`)).json(); } catch { entry = null; }
+  if (!entry) { detail.innerHTML = `<button class="history-back" id="history-back">← Back to history</button><div class="history-empty">Couldn't load that entry.</div>`; $("history-back").addEventListener("click", loadHistoryList); return; }
+  const r = entry.response;
+  let body;
+  if (entry.kind === "improve") {
+    body = `
+      <div class="section-label">Generated test scenarios</div><div class="scenarios">${r.scenarios.map((s, i) => `<div class="scenario-item">0${i + 1} · ${escapeHtml(s)}</div>`).join("")}</div>
+      <div class="score-row"><div class="score-badge ${scoreClass(r.score)}">${r.score}/5</div><p class="reasoning">${escapeHtml(r.reasoning)}</p></div>
+      <div class="improved-box"><div class="improved-header">Suggested upgrade</div><div class="improved-text">${escapeHtml(r.improved_prompt)}</div></div>`;
+  } else {
+    body = `
+      <div class="section-label">Task · ${escapeHtml(r.task_name)}</div>
+      <div class="section-label">Generated test scenarios</div><div class="scenarios">${r.scenarios.map((s, i) => `<div class="scenario-item">0${i + 1} · ${escapeHtml(s)}</div>`).join("")}</div>
+      <div class="section-label">Ranked results</div><div>${r.variants.map((v, i) => `<div class="variant-card ${v.is_winner ? "winner" : ""}"><div class="rank-badge">${i + 1}</div><div class="variant-info"><div class="variant-name">${escapeHtml(v.label)} ${v.is_winner ? '<span class="winner-tag">Winner</span>' : ""}</div><div class="variant-stats"><span>Quality <b>${v.quality.toFixed(2)}</b></span><span>Latency <b>${v.latency_ms.toFixed(0)}ms</b></span><span>Weighted <b>${v.weighted_score.toFixed(3)}</b></span></div></div></div>`).join("")}</div>
+      <div class="rationale">${escapeHtml(r.rationale)}</div>`;
+  }
+  detail.innerHTML = `<button class="history-back" id="history-back">← Back to history</button><p class="result-kicker">${entry.kind === "improve" ? "Refinement" : "Comparison"} · ${formatWhen(entry.created_at)} · ${escapeHtml(entry.model)}</p>${body}`;
+  $("history-back").addEventListener("click", loadHistoryList);
+}
+$("history-clear").addEventListener("click", async () => {
+  if (!confirm("Delete all saved history? This can't be undone.")) return;
+  await fetch("/api/history", { method: "DELETE" });
+  loadHistoryList();
+});
 </script>
 </body>
 </html>

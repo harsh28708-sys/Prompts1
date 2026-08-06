@@ -187,6 +187,18 @@ option to get rate-limited while you're testing. Gemini's free tier and
 OpenRouter's `:free` models both have much smaller daily caps and can run
 dry quickly; Claude has no free tier at all.
 
+### History
+
+Every completed Refine or Compare run is saved automatically to a local
+**History** tab — the full prompt(s), generated scenarios, score/ranking, and
+rewrite, so you can look back at what you tried without re-running it.
+
+It's stored in a small SQLite file at `~/.promteval/history.db` — no server,
+no account, no cost, and nothing ever leaves your machine. Click any entry to
+see the full result again, **Delete** to remove one, or **Clear all** to wipe
+it entirely. (Runs made through the terminal commands aren't saved here —
+this is specific to the browser UI.)
+
 **`prompteval init`** — same idea as `quickstart`, but asks you everything yourself
 (task name, prompt variants, test cases, rubric) instead of generating any of it,
 and saves it as a real input file you can run or edit later:

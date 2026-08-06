@@ -24,6 +24,14 @@ def _fake_api_key(monkeypatch):
     monkeypatch.setattr(web_module, "has_any_api_key", lambda: True)
 
 
+@pytest.fixture(autouse=True)
+def _isolated_history_db(monkeypatch, tmp_path):
+    """Every endpoint that runs successfully writes to history -- point that at
+    a throwaway file so tests never touch (or get polluted by) the real
+    ~/.promteval/history.db."""
+    monkeypatch.setattr(web_module, "HISTORY_DB_PATH", tmp_path / "history.db")
+
+
 def fake_call_result(text: str, variant_id: str = "v1") -> LLMCallResult:
     return LLMCallResult(
         variant_id=variant_id,
@@ -174,3 +182,95 @@ def test_api_quickstart_reports_generation_failure_as_a_clean_error(monkeypatch)
 
     assert response.status_code == 502
     assert "model unavailable" in response.json()["detail"]
+
+
+# --- History ----------------------------------------------------------------
+
+
+def test_api_improve_success_is_saved_to_history(monkeypatch):
+    monkeypatch.setattr(web_module, "generate_test_cases", AsyncMock(return_value=["a", "b", "c"]))
+    monkeypatch.setattr(web_module, "execute_matrix", AsyncMock(return_value=[fake_call_result("out")]))
+    monkeypatch.setattr(
+        web_module, "generate_feedback",
+        AsyncMock(return_value=PromptFeedback(score=4, reasoning="Solid.", improved_prompt="Better: {input}")),
+    )
+
+    client.post("/api/improve", json={"prompt": "Summarize: {input}"})
+
+    history = client.get("/api/history").json()
+    assert len(history) == 1
+    assert history[0]["kind"] == "improve"
+    assert history[0]["summary"] == "Summarize: {input}"
+
+
+def test_api_improve_failure_is_not_saved_to_history(monkeypatch):
+    monkeypatch.setattr(
+        web_module, "generate_test_cases", AsyncMock(side_effect=GenerationError("model unavailable"))
+    )
+
+    client.post("/api/improve", json={"prompt": "Summarize: {input}"})
+
+    assert client.get("/api/history").json() == []
+
+
+def test_api_history_detail_returns_the_full_request_and_response(monkeypatch):
+    monkeypatch.setattr(web_module, "generate_test_cases", AsyncMock(return_value=["a", "b", "c"]))
+    monkeypatch.setattr(web_module, "execute_matrix", AsyncMock(return_value=[fake_call_result("out")]))
+    monkeypatch.setattr(
+        web_module, "generate_feedback",
+        AsyncMock(return_value=PromptFeedback(score=4, reasoning="Solid.", improved_prompt="Better: {input}")),
+    )
+    client.post("/api/improve", json={"prompt": "Summarize: {input}"})
+    entry_id = client.get("/api/history").json()[0]["id"]
+
+    detail = client.get(f"/api/history/{entry_id}")
+
+    assert detail.status_code == 200
+    body = detail.json()
+    assert body["response"]["score"] == 4
+    assert body["request"]["prompt"] == "Summarize: {input}"
+
+
+def test_api_history_detail_404s_for_a_missing_id():
+    response = client.get("/api/history/999999")
+
+    assert response.status_code == 404
+
+
+def test_api_history_delete_removes_one_entry(monkeypatch):
+    monkeypatch.setattr(web_module, "generate_test_cases", AsyncMock(return_value=["a", "b", "c"]))
+    monkeypatch.setattr(web_module, "execute_matrix", AsyncMock(return_value=[fake_call_result("out")]))
+    monkeypatch.setattr(
+        web_module, "generate_feedback",
+        AsyncMock(return_value=PromptFeedback(score=4, reasoning="Solid.", improved_prompt="Better: {input}")),
+    )
+    client.post("/api/improve", json={"prompt": "Summarize: {input}"})
+    entry_id = client.get("/api/history").json()[0]["id"]
+
+    delete_response = client.delete(f"/api/history/{entry_id}")
+
+    assert delete_response.status_code == 200
+    assert client.get("/api/history").json() == []
+
+
+def test_api_history_delete_404s_for_a_missing_id():
+    response = client.delete("/api/history/999999")
+
+    assert response.status_code == 404
+
+
+def test_api_history_clear_removes_everything(monkeypatch):
+    monkeypatch.setattr(web_module, "generate_test_cases", AsyncMock(return_value=["a", "b", "c"]))
+    monkeypatch.setattr(web_module, "execute_matrix", AsyncMock(return_value=[fake_call_result("out")]))
+    monkeypatch.setattr(
+        web_module, "generate_feedback",
+        AsyncMock(return_value=PromptFeedback(score=4, reasoning="Solid.", improved_prompt="Better: {input}")),
+    )
+    client.post("/api/improve", json={"prompt": "First"})
+    client.post("/api/improve", json={"prompt": "Second"})
+
+    response = client.delete("/api/history")
+
+    assert response.status_code == 200
+    assert response.json()["deleted_count"] == 2
+    assert client.get("/api/history").json() == []
