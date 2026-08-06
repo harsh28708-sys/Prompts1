@@ -71,6 +71,7 @@ you'll see an arrow-key menu instead of needing to know a command name:
 ? What do you want to do?
 ❯ Improve one prompt (get a score + a better version)
   Compare 3 prompts (AI makes up the test data)
+  Open the browser UI instead (Improve + Compare, visually)
   Save a prompt comparison to a file for later (doesn't run yet)
   Run a prompt comparison file you already have
   Help -- what do these options actually mean?
@@ -150,6 +151,26 @@ prompteval quickstart --judge-model groq/llama-3.3-70b-versatile
 Your 3 prompts should use `{input}` as the placeholder — that's the fixed variable
 name the AI-generated test cases fill in. It still saves a copy of the generated
 input file afterward, so you can re-run the exact same test later with `prompteval run`.
+
+## Prefer a browser over the terminal?
+
+**`prompteval web`** — opens the same Improve and Compare flows as a page in
+your own browser instead of the terminal: type your prompt(s) into text boxes,
+click a button, and watch the score / ranked results appear on the page.
+
+```bash
+prompteval web
+```
+
+It's still 100% local — the server only binds to `127.0.0.1` (your own
+machine), so nothing outside your computer can reach it, and closing the
+browser tab doesn't stop it (Ctrl+C in the terminal does). Options:
+
+- `--port 9000` — use a different local port (default `8420`)
+- `--no-browser` — start the server without automatically opening a tab
+
+If no API key is configured yet, the page itself shows a warning banner
+instead of the terminal's message — everything else works the same way.
 
 **`prompteval init`** — same idea as `quickstart`, but asks you everything yourself
 (task name, prompt variants, test cases, rubric) instead of generating any of it,

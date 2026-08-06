@@ -10,10 +10,12 @@ dependencies = [
     "tenacity",
     "questionary",
     "rich",
+    "fastapi",
+    "uvicorn",
 ]
 
 [project.optional-dependencies]
-dev = ["ruff", "pytest", "pytest-asyncio"]
+dev = ["ruff", "pytest", "pytest-asyncio", "httpx"]
 
 [project.scripts]
 prompteval = "promteval.cli:main"

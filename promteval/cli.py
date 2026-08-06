@@ -5,7 +5,6 @@ into the single command described in Plan.md: `prompteval run <input.json>`.
 import argparse
 import asyncio
 import json
-import os
 import sys
 import warnings
 from pathlib import Path
@@ -20,6 +19,7 @@ from pydantic import ValidationError
 # by exact message text only, so it can't accidentally hide a real warning.
 warnings.filterwarnings("ignore", message="coroutine 'Logging.async_success_handler' was never awaited")
 
+from promteval.config import has_any_api_key
 from promteval.critique import generate_feedback, write_feedback_report
 from promteval.executor import DEFAULT_CONCURRENCY, DEFAULT_TIMEOUT_S, execute_matrix
 from promteval.generator import GenerationError
@@ -37,6 +37,7 @@ from promteval.ui import (
     print_report_table,
     thinking,
 )
+from promteval.web import run_server
 from promteval.wizard import (
     DEFAULT_MODEL,
     QUICKSTART_VARIABLE,
@@ -46,8 +47,6 @@ from promteval.wizard import (
 )
 
 DEFAULT_JUDGE_MODEL = "gemini/gemini-2.0-flash"
-
-_API_KEY_VARS = ("OPENROUTER_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY", "ANTHROPIC_API_KEY")
 
 HELP_TEXT = """
 PromtEval -- test a prompt against a real AI and get a score plus a better
@@ -72,6 +71,10 @@ THE WAYS TO USE IT
     prompteval quickstart          Want to compare 3 different prompts instead
                                     of improving one? AI makes up a task and
                                     test data for you; you write 3 prompts.
+
+    prompteval web                 Same two things (Improve, Compare) but in a
+                                    browser tab on your own computer, with a
+                                    nicer-looking UI. Nothing leaves your PC.
 
     prompteval init <file>         Answer the same kind of questions as
                                     quickstart, but SAVE them to a file you
@@ -121,10 +124,6 @@ Then:
 
 Run `prompteval /help` for the full guide.
 """.strip("\n")
-
-
-def _has_any_api_key() -> bool:
-    return any(os.environ.get(key) for key in _API_KEY_VARS)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -198,6 +197,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Per-call timeout in seconds (default: {DEFAULT_TIMEOUT_S}).",
     )
 
+    web_parser = subparsers.add_parser(
+        "web", help="Open a local browser UI for Improve/Compare (runs only on this machine)."
+    )
+    web_parser.add_argument("--port", type=int, default=8420, help="Local port to serve on (default: 8420).")
+    web_parser.add_argument(
+        "--no-browser", action="store_true", help="Don't automatically open a browser tab."
+    )
+
     return parser
 
 
@@ -218,12 +225,13 @@ async def run_pipeline(run: EvalRun, judge_model: str, concurrency: int, timeout
     return build_run_report(run, raw_results, list(judge_results))
 
 
-_SUBCOMMANDS = {"run", "init", "quickstart", "improve"}
+_SUBCOMMANDS = {"run", "init", "quickstart", "improve", "web"}
 _HELP_TOKENS = {"/help", "help", "-h", "--help"}
 
 _MENU_CHOICES = [
     questionary.Choice("Improve one prompt (get a score + a better version)", value="improve"),
     questionary.Choice("Compare 3 prompts (AI makes up the test data)", value="quickstart"),
+    questionary.Choice("Open the browser UI instead (Improve + Compare, visually)", value="web"),
     questionary.Choice("Save a prompt comparison to a file for later (doesn't run yet)", value="init"),
     questionary.Choice("Run a prompt comparison file you already have", value="run"),
     questionary.Choice("Help -- what do these options actually mean?", value="help"),
@@ -242,6 +250,12 @@ COMPARE 3 PROMPTS
   You have several DIFFERENT versions of a prompt and want to know
   which one is actually best. AI makes up a task and test messages,
   you type in your 3 versions, and it ranks them against each other.
+
+OPEN THE BROWSER UI INSTEAD
+  Same two things as above (Improve and Compare), but as a page in
+  your web browser instead of the terminal -- type your prompt(s)
+  into text boxes and see the score/ranking laid out visually. Runs
+  only on your own computer; nothing is uploaded anywhere.
 
 SAVE A PROMPT COMPARISON TO A FILE FOR LATER
   Same questions as "Compare 3 prompts", but instead of running it
@@ -346,7 +360,7 @@ def main(argv: list[str] | None = None) -> int:
         argv = resolved
     args = build_parser().parse_args(argv)
 
-    if args.command in ("run", "quickstart", "improve") and not _has_any_api_key():
+    if args.command in ("run", "quickstart", "improve") and not has_any_api_key():
         err_console.print(NO_API_KEY_MESSAGE)
         return 1
 
@@ -356,6 +370,10 @@ def main(argv: list[str] | None = None) -> int:
         output_path.write_text(json.dumps(run.model_dump(), indent=2), encoding="utf-8")
         console.print(f"\n[bold green]Saved[/bold green] to: {output_path}")
         console.print(f"Run it with: [cyan]prompteval run {output_path}[/cyan]")
+        return 0
+
+    if args.command == "web":
+        run_server(port=args.port, open_browser=not args.no_browser)
         return 0
 
     if args.command == "improve":

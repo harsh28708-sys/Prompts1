@@ -2,7 +2,7 @@
 
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import litellm
 import pytest
@@ -281,6 +281,28 @@ def test_main_with_only_flags_shows_menu_and_applies_them(tmp_path, monkeypatch)
     assert list(tmp_path.glob("Summarize_*_feedback_*.md"))
 
 
+def test_main_web_starts_the_local_server(monkeypatch):
+    # In plain terms: `prompteval web` should hand off to the local browser
+    # server with whatever port/--no-browser flags were given, not run a pipeline.
+    fake_run_server = Mock()
+    monkeypatch.setattr(cli_module, "run_server", fake_run_server)
+
+    exit_code = main(["web", "--port", "9999", "--no-browser"])
+
+    assert exit_code == 0
+    fake_run_server.assert_called_once_with(port=9999, open_browser=False)
+
+
+def test_main_web_defaults_to_opening_a_browser_on_the_default_port(monkeypatch):
+    fake_run_server = Mock()
+    monkeypatch.setattr(cli_module, "run_server", fake_run_server)
+
+    exit_code = main(["web"])
+
+    assert exit_code == 0
+    fake_run_server.assert_called_once_with(port=8420, open_browser=True)
+
+
 def test_main_quickstart_reports_generation_failure_cleanly(monkeypatch, capsys):
     # In plain terms: if the AI generation step fails (bad network, bad response),
     # quickstart should print a clear error and exit, not crash with a traceback.
@@ -309,6 +331,14 @@ def test_menu_quickstart_choice_returns_quickstart_argv(monkeypatch):
     result = cli_module._run_interactive_menu([])
 
     assert result == ["quickstart"]
+
+
+def test_menu_web_choice_returns_web_argv(monkeypatch):
+    monkeypatch.setattr(cli_module.questionary, "select", lambda *a, **k: fake_ask("web"))
+
+    result = cli_module._run_interactive_menu([])
+
+    assert result == ["web"]
 
 
 def test_menu_run_choice_asks_for_a_file_path(monkeypatch):

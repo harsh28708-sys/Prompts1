@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PromtEval</title>
+<style>
+  :root {
+    --bg-0: #0b0e17;
+    --bg-1: #12162a;
+    --card: rgba(255, 255, 255, 0.045);
+    --card-border: rgba(255, 255, 255, 0.09);
+    --text: #e8eaf3;
+    --text-dim: #8b90ab;
+    --accent-a: #7c5cff;
+    --accent-b: #22d3ee;
+    --green: #34d399;
+    --yellow: #fbbf24;
+    --red: #f87171;
+    --radius: 16px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(124, 92, 255, 0.25), transparent 60%),
+      radial-gradient(1000px 500px at 110% 10%, rgba(34, 211, 238, 0.18), transparent 55%),
+      linear-gradient(160deg, var(--bg-0), var(--bg-1) 60%, var(--bg-0));
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 880px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  header { text-align: center; margin-bottom: 36px; animation: fadeDown 0.5s ease both; }
+
+  .logo {
+    font-size: 40px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    background: linear-gradient(120deg, var(--accent-b), var(--accent-a) 70%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    margin: 0;
+  }
+  .tagline { color: var(--text-dim); margin: 8px 0 0; font-size: 15px; }
+  .local-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-top: 14px; padding: 6px 14px; border-radius: 999px;
+    background: rgba(52, 211, 153, 0.1); border: 1px solid rgba(52, 211, 153, 0.3);
+    color: var(--green); font-size: 12.5px; font-weight: 600;
+  }
+  .local-badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
+
+  .tabs {
+    display: flex; gap: 6px; background: var(--card); border: 1px solid var(--card-border);
+    padding: 6px; border-radius: 14px; margin-bottom: 24px;
+    animation: fadeUp 0.5s ease 0.05s both;
+  }
+  .tab {
+    flex: 1; text-align: center; padding: 12px; border-radius: 10px; cursor: pointer;
+    color: var(--text-dim); font-weight: 600; font-size: 14.5px; transition: all 0.2s ease;
+    user-select: none;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active {
+    color: #fff;
+    background: linear-gradient(120deg, var(--accent-a), var(--accent-b));
+    box-shadow: 0 6px 20px rgba(124, 92, 255, 0.35);
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius);
+    padding: 28px; backdrop-filter: blur(20px);
+    animation: fadeUp 0.5s ease 0.1s both;
+  }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  label { display: block; font-size: 13.5px; font-weight: 600; color: var(--text-dim); margin: 18px 0 8px; }
+  label:first-child { margin-top: 0; }
+  label .hint { font-weight: 400; color: var(--text-dim); opacity: 0.75; }
+
+  textarea, input[type="text"], select {
+    width: 100%; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--card-border);
+    border-radius: 10px; color: var(--text); padding: 12px 14px; font-size: 14.5px;
+    font-family: inherit; resize: vertical; transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  textarea:focus, input:focus, select:focus {
+    outline: none; border-color: var(--accent-b);
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15);
+  }
+  textarea { min-height: 78px; }
+  select { appearance: none; cursor: pointer; }
+
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .prompt-block { border-top: 1px dashed var(--card-border); padding-top: 14px; margin-top: 14px; }
+  .prompt-block:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+
+  .run-btn {
+    width: 100%; margin-top: 22px; padding: 15px; border: none; border-radius: 12px;
+    font-size: 15.5px; font-weight: 700; color: #fff; cursor: pointer;
+    background: linear-gradient(120deg, var(--accent-a), var(--accent-b));
+    box-shadow: 0 10px 30px rgba(124, 92, 255, 0.3);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  }
+  .run-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 34px rgba(124, 92, 255, 0.42); }
+  .run-btn:active { transform: translateY(0); }
+  .run-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+  .status {
+    display: none; align-items: center; gap: 12px; margin-top: 20px;
+    padding: 14px 16px; border-radius: 12px; background: rgba(124, 92, 255, 0.08);
+    border: 1px solid rgba(124, 92, 255, 0.2); color: var(--text-dim); font-size: 14px;
+  }
+  .status.active { display: flex; }
+  .spinner {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2.5px solid rgba(255, 255, 255, 0.15); border-top-color: var(--accent-b);
+    animation: spin 0.8s linear infinite; flex-shrink: 0;
+  }
+
+  .error-banner {
+    display: none; margin-top: 20px; padding: 14px 16px; border-radius: 12px;
+    background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.35);
+    color: #ffb4b4; font-size: 14px; line-height: 1.5;
+  }
+  .error-banner.active { display: block; }
+
+  .results { display: none; margin-top: 26px; animation: fadeUp 0.4s ease both; }
+  .results.active { display: block; }
+
+  .scenarios { margin-top: 4px; }
+  .scenario-item {
+    font-size: 13.5px; color: var(--text-dim); padding: 8px 12px; margin-bottom: 6px;
+    background: rgba(255, 255, 255, 0.03); border-radius: 8px; border-left: 2px solid var(--accent-b);
+  }
+
+  .score-row { display: flex; align-items: center; gap: 16px; margin: 20px 0 14px; }
+  .score-badge {
+    width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 800; flex-shrink: 0; border: 3px solid; color: #fff;
+  }
+  .score-badge.green { border-color: var(--green); background: rgba(52, 211, 153, 0.12); color: var(--green); }
+  .score-badge.yellow { border-color: var(--yellow); background: rgba(251, 191, 36, 0.12); color: var(--yellow); }
+  .score-badge.red { border-color: var(--red); background: rgba(248, 113, 113, 0.12); color: var(--red); }
+  .reasoning { color: var(--text); font-size: 14.5px; line-height: 1.6; margin: 0; }
+
+  .improved-box {
+    margin-top: 18px; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--card-border);
+    border-radius: 12px; overflow: hidden;
+  }
+  .improved-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 16px; background: rgba(255, 255, 255, 0.03); font-size: 12.5px;
+    font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-dim);
+  }
+  .copy-btn {
+    background: none; border: 1px solid var(--card-border); color: var(--text-dim);
+    padding: 4px 10px; border-radius: 6px; font-size: 11.5px; cursor: pointer; transition: all 0.15s ease;
+  }
+  .copy-btn:hover { color: var(--text); border-color: var(--accent-b); }
+  .improved-text { padding: 16px; font-size: 14.5px; line-height: 1.6; white-space: pre-wrap; }
+
+  .variant-card {
+    display: flex; align-items: center; gap: 16px; padding: 16px; margin-bottom: 10px;
+    background: rgba(255, 255, 255, 0.03); border: 1px solid var(--card-border); border-radius: 12px;
+    transition: all 0.2s ease;
+  }
+  .variant-card.winner {
+    background: rgba(52, 211, 153, 0.08); border-color: rgba(52, 211, 153, 0.4);
+    box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.15);
+  }
+  .rank-badge {
+    width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 14px; background: rgba(255, 255, 255, 0.06); flex-shrink: 0;
+  }
+  .variant-card.winner .rank-badge { background: var(--green); color: #062b1d; }
+  .variant-info { flex: 1; min-width: 0; }
+  .variant-name { font-weight: 700; font-size: 14.5px; display: flex; align-items: center; gap: 8px; }
+  .winner-tag {
+    font-size: 10.5px; font-weight: 800; letter-spacing: 0.05em; color: #062b1d;
+    background: var(--green); padding: 2px 8px; border-radius: 999px;
+  }
+  .variant-stats { display: flex; gap: 16px; margin-top: 6px; font-size: 12.5px; color: var(--text-dim); }
+  .variant-stats b { color: var(--text); }
+
+  .rationale {
+    margin-top: 16px; padding: 14px 16px; background: rgba(255, 255, 255, 0.03);
+    border-radius: 10px; font-size: 14px; color: var(--text-dim); line-height: 1.6;
+  }
+
+  footer { text-align: center; margin-top: 40px; color: var(--text-dim); font-size: 12.5px; opacity: 0.7; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes fadeDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+  @media (max-width: 560px) {
+    .row { grid-template-columns: 1fr; }
+    .wrap { padding: 32px 16px 60px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 class="logo">PromtEval</h1>
+    <p class="tagline">Test your prompts against a real AI &mdash; right on your machine</p>
+    <div class="local-badge">Running locally &middot; nothing leaves this computer except the AI calls you make</div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="improve">✨ Improve one prompt</div>
+    <div class="tab" data-tab="compare">⚖️ Compare 3 prompts</div>
+  </div>
+
+  <div class="card">
+    <!-- IMPROVE PANEL -->
+    <div class="panel active" id="panel-improve">
+      <label for="improve-prompt">Your prompt <span class="hint">&mdash; use <code>{input}</code> where the real data goes</span></label>
+      <textarea id="improve-prompt" placeholder="Summarize this customer message in one sentence: {input}"></textarea>
+
+      <div class="row">
+        <div>
+          <label for="improve-model">Model</label>
+          <input type="text" id="improve-model" value="groq/llama-3.3-70b-versatile" />
+        </div>
+        <div>
+          <label for="improve-judge-model">Judge model <span class="hint">(optional)</span></label>
+          <input type="text" id="improve-judge-model" placeholder="Same as model above" />
+        </div>
+      </div>
+
+      <button class="run-btn" id="improve-run">Test My Prompt</button>
+
+      <div class="status" id="improve-status"><div class="spinner"></div><span id="improve-status-text">Thinking&hellip;</span></div>
+      <div class="error-banner" id="improve-error"></div>
+
+      <div class="results" id="improve-results">
+        <label>Generated scenarios</label>
+        <div class="scenarios" id="improve-scenarios"></div>
+
+        <div class="score-row">
+          <div class="score-badge" id="improve-score-badge">-</div>
+          <p class="reasoning" id="improve-reasoning"></p>
+        </div>
+
+        <div class="improved-box">
+          <div class="improved-header">
+            Improved Prompt
+            <button class="copy-btn" id="improve-copy">Copy</button>
+          </div>
+          <div class="improved-text" id="improve-improved-text"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COMPARE PANEL -->
+    <div class="panel" id="panel-compare">
+      <label for="compare-task">Task <span class="hint">(leave blank and AI will pick one for you)</span></label>
+      <input type="text" id="compare-task" placeholder="e.g. Summarize support tickets" />
+
+      <div class="prompt-block">
+        <label for="compare-p1">Prompt 1 <span class="hint">&mdash; use <code>{input}</code> where the real data goes</span></label>
+        <textarea id="compare-p1" placeholder="Summarize: {input}"></textarea>
+      </div>
+      <div class="prompt-block">
+        <label for="compare-p2">Prompt 2</label>
+        <textarea id="compare-p2" placeholder="Give a detailed summary: {input}"></textarea>
+      </div>
+      <div class="prompt-block">
+        <label for="compare-p3">Prompt 3</label>
+        <textarea id="compare-p3" placeholder="TL;DR in one line: {input}"></textarea>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="compare-model">Model</label>
+          <input type="text" id="compare-model" value="groq/llama-3.3-70b-versatile" />
+        </div>
+        <div>
+          <label for="compare-judge-model">Judge model <span class="hint">(optional)</span></label>
+          <input type="text" id="compare-judge-model" placeholder="Same as model above" />
+        </div>
+      </div>
+
+      <button class="run-btn" id="compare-run">Compare Prompts</button>
+
+      <div class="status" id="compare-status"><div class="spinner"></div><span id="compare-status-text">Thinking&hellip;</span></div>
+      <div class="error-banner" id="compare-error"></div>
+
+      <div class="results" id="compare-results">
+        <label id="compare-task-label">Task</label>
+        <label>Generated scenarios</label>
+        <div class="scenarios" id="compare-scenarios"></div>
+
+        <label>Ranked results</label>
+        <div id="compare-variants"></div>
+
+        <div class="rationale" id="compare-rationale"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>PromtEval &middot; local web UI &middot; close this tab any time, the server keeps running in your terminal</footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+// --- Tabs ---
+document.querySelectorAll(".tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+    document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
+    tab.classList.add("active");
+    $("panel-" + tab.dataset.tab).classList.add("active");
+  });
+});
+
+function scoreClass(score) {
+  if (score >= 4) return "green";
+  if (score === 3) return "yellow";
+  return "red";
+}
+
+function setStatus(el, textEl, text, on) {
+  textEl.textContent = text;
+  el.classList.toggle("active", on);
+}
+
+function setError(el, message) {
+  if (!message) { el.classList.remove("active"); el.textContent = ""; return; }
+  el.textContent = message;
+  el.classList.add("active");
+}
+
+async function callApi(path, body) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.detail || `Request failed (${res.status})`);
+  }
+  return data;
+}
+
+// --- Improve ---
+$("improve-run").addEventListener("click", async () => {
+  const prompt = $("improve-prompt").value.trim();
+  const btn = $("improve-run");
+  const statusEl = $("improve-status"), statusText = $("improve-status-text");
+  const errorEl = $("improve-error"), resultsEl = $("improve-results");
+
+  setError(errorEl, null);
+  resultsEl.classList.remove("active");
+  if (!prompt) { setError(errorEl, "Enter a prompt first."); return; }
+
+  btn.disabled = true;
+  setStatus(statusEl, statusText, "Generating scenarios, running your prompt, and scoring it…", true);
+
+  try {
+    const data = await callApi("/api/improve", {
+      prompt,
+      model: $("improve-model").value.trim() || "groq/llama-3.3-70b-versatile",
+      judge_model: $("improve-judge-model").value.trim() || null,
+    });
+
+    $("improve-scenarios").innerHTML = data.scenarios
+      .map((s, i) => `<div class="scenario-item">${i + 1}. ${escapeHtml(s)}</div>`)
+      .join("");
+
+    const badge = $("improve-score-badge");
+    badge.textContent = data.score + "/5";
+    badge.className = "score-badge " + scoreClass(data.score);
+    $("improve-reasoning").textContent = data.reasoning;
+    $("improve-improved-text").textContent = data.improved_prompt;
+
+    resultsEl.classList.add("active");
+  } catch (err) {
+    setError(errorEl, err.message);
+  } finally {
+    btn.disabled = false;
+    setStatus(statusEl, statusText, "", false);
+  }
+});
+
+$("improve-copy").addEventListener("click", () => {
+  navigator.clipboard.writeText($("improve-improved-text").textContent);
+  const btn = $("improve-copy");
+  const original = btn.textContent;
+  btn.textContent = "Copied!";
+  setTimeout(() => (btn.textContent = original), 1200);
+});
+
+// --- Compare ---
+$("compare-run").addEventListener("click", async () => {
+  const prompts = [$("compare-p1").value.trim(), $("compare-p2").value.trim(), $("compare-p3").value.trim()].filter(Boolean);
+  const btn = $("compare-run");
+  const statusEl = $("compare-status"), statusText = $("compare-status-text");
+  const errorEl = $("compare-error"), resultsEl = $("compare-results");
+
+  setError(errorEl, null);
+  resultsEl.classList.remove("active");
+  if (prompts.length < 2) { setError(errorEl, "Enter at least 2 prompts to compare."); return; }
+
+  btn.disabled = true;
+  setStatus(statusEl, statusText, "Generating a task and test data, running every prompt, and ranking them…", true);
+
+  try {
+    const data = await callApi("/api/quickstart", {
+      task: $("compare-task").value.trim(),
+      prompts,
+      model: $("compare-model").value.trim() || "groq/llama-3.3-70b-versatile",
+      judge_model: $("compare-judge-model").value.trim() || null,
+    });
+
+    $("compare-task-label").textContent = "Task: " + data.task_name;
+    $("compare-scenarios").innerHTML = data.scenarios
+      .map((s, i) => `<div class="scenario-item">${i + 1}. ${escapeHtml(s)}</div>`)
+      .join("");
+
+    $("compare-variants").innerHTML = data.variants
+      .map((v, i) => `
+        <div class="variant-card ${v.is_winner ? "winner" : ""}">
+          <div class="rank-badge">${i + 1}</div>
+          <div class="variant-info">
+            <div class="variant-name">${escapeHtml(v.label)} ${v.is_winner ? '<span class="winner-tag">Winner</span>' : ""}</div>
+            <div class="variant-stats">
+              <span>Quality: <b>${v.quality.toFixed(2)}</b></span>
+              <span>Latency: <b>${v.latency_ms.toFixed(0)}ms</b></span>
+              <span>Weighted: <b>${v.weighted_score.toFixed(3)}</b></span>
+            </div>
+          </div>
+        </div>
+      `)
+      .join("");
+
+    $("compare-rationale").textContent = data.rationale;
+    resultsEl.classList.add("active");
+  } catch (err) {
+    setError(errorEl, err.message);
+  } finally {
+    btn.disabled = false;
+    setStatus(statusEl, statusText, "", false);
+  }
+});
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// --- API key check on load ---
+fetch("/api/status").then((r) => r.json()).then((data) => {
+  if (!data.has_api_key) {
+    const banner = document.createElement("div");
+    banner.className = "error-banner active";
+    banner.style.marginBottom = "20px";
+    banner.textContent = "No API key found. Copy .env.example to .env, add a real key, then restart the server.";
+    document.querySelector(".card").prepend(banner);
+  }
+}).catch(() => {});
+</script>
+</body>
+</html>
