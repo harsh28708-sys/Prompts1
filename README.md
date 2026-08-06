@@ -79,7 +79,7 @@ you'll see an arrow-key menu instead of needing to know a command name:
 ```
 
 Use ↑/↓ and Enter to pick. Any flags you already typed still apply to whatever you
-pick, e.g. `prompteval --judge-model groq/llama-3.3-70b-versatile` shows the menu
+pick, e.g. `prompteval --judge-model groq/llama-3.1-8b-instant` shows the menu
 and applies that flag to whichever option you choose. Picking **Help** explains
 each option in plain terms (not the full install guide — that's `prompteval /help`).
 
@@ -97,7 +97,7 @@ An input file is a JSON object with five fields:
 ```json
 {
   "task_name": "Summarize support tickets",
-  "models": ["groq/llama-3.3-70b-versatile"],
+  "models": ["groq/llama-3.1-8b-instant"],
   "prompt_variants": [
     { "id": "v1", "name": "Direct", "template": "Summarize in one sentence: {customer_message}" }
   ],
@@ -127,10 +127,10 @@ real against a few AI-generated scenarios, and gives you a **score (1-5)** plus 
 **rewritten, improved version** of your prompt:
 
 ```bash
-prompteval improve --judge-model groq/llama-3.3-70b-versatile
+prompteval improve --judge-model groq/llama-3.1-8b-instant
 
 # or, since improve is the default when no subcommand is given:
-prompteval --judge-model groq/llama-3.3-70b-versatile
+prompteval --judge-model groq/llama-3.1-8b-instant
 ```
 
 It only asks for your prompt (use `{input}` as the placeholder for the part that
@@ -145,7 +145,7 @@ and every test case's real output to a markdown file afterward.
 immediately — no file, no second command:
 
 ```bash
-prompteval quickstart --judge-model groq/llama-3.3-70b-versatile
+prompteval quickstart --judge-model groq/llama-3.1-8b-instant
 ```
 
 Your 3 prompts should use `{input}` as the placeholder — that's the fixed variable
@@ -180,19 +180,26 @@ one model to both run and judge your prompt — no separate judge model to pick
 there; Compare still has an optional Judge model dropdown, since comparing
 several prompts benefits more from a second, unbiased opinion.
 
+The default, Groq's **Llama 3.1 8B**, has by far the highest free rate limit
+of any model here (14,400 requests/day vs 1,000/day on the other Groq
+models, checked via Groq's own rate-limit headers) — it's the least likely
+option to get rate-limited while you're testing. Gemini's free tier and
+OpenRouter's `:free` models both have much smaller daily caps and can run
+dry quickly; Claude has no free tier at all.
+
 **`prompteval init`** — same idea as `quickstart`, but asks you everything yourself
 (task name, prompt variants, test cases, rubric) instead of generating any of it,
 and saves it as a real input file you can run or edit later:
 
 ```bash
 prompteval init my_task.json
-prompteval run my_task.json --judge-model groq/llama-3.3-70b-versatile
+prompteval run my_task.json --judge-model groq/llama-3.1-8b-instant
 ```
 
 ## Run it
 
 ```bash
-prompteval run examples/sample_run.json --judge-model groq/llama-3.3-70b-versatile
+prompteval run examples/sample_run.json --judge-model groq/llama-3.1-8b-instant
 ```
 
 > The default judge model is `gemini/gemini-2.0-flash`. If your Google Cloud project
@@ -211,7 +218,7 @@ Optional flags (all override the defaults from `Plan.md`):
 Example overriding the judge model:
 
 ```bash
-prompteval run examples/sample_run.json --judge-model groq/llama-3.3-70b-versatile
+prompteval run examples/sample_run.json --judge-model groq/llama-3.1-8b-instant
 ```
 
 ## Reading the report

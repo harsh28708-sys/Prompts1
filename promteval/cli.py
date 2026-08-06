@@ -95,12 +95,14 @@ YOU NEED ONE FREE API KEY
         Claude:     https://console.anthropic.com/settings/keys
         Model strings look like: anthropic/claude-sonnet-5
 
-    Also add --judge-model groq/llama-3.3-70b-versatile to whichever command
+    Also add --judge-model groq/llama-3.1-8b-instant to whichever command
     you run -- the tool's built-in default judge needs Google billing set up,
-    which most free accounts don't have.
+    which most free accounts don't have. That Groq model also has the
+    highest free-tier rate limit (14,400 requests/day vs 1,000/day on
+    others), so it's the least likely to get rate-limited mid-run.
 
 EXAMPLE
-    prompteval --judge-model groq/llama-3.3-70b-versatile
+    prompteval --judge-model groq/llama-3.1-8b-instant
 
 MORE HELP
     prompteval /help            Show this message again

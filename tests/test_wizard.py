@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 
 import promteval.wizard as wizard_module
 from promteval.wizard import (
+    DEFAULT_MODEL,
     _prompt,
     _prompt_yes_no,
     run_improve_wizard,
@@ -82,7 +83,7 @@ def test_run_init_wizard_builds_a_valid_eval_run(monkeypatch):
     assert run.task_name == "Test task"
     assert [v.name for v in run.prompt_variants] == ["Direct", "Verbose"]
     assert run.test_cases[0].variables == {"msg": "Hello world"}
-    assert run.models == ["groq/llama-3.3-70b-versatile"]
+    assert run.models == [DEFAULT_MODEL]
     assert "accuracy" in run.judge_criteria
 
 

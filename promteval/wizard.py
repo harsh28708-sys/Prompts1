@@ -8,7 +8,9 @@ from promteval.generator import generate_random_task, generate_test_cases
 from promteval.schemas import EvalRun, PromptVariant, TestCase
 from promteval.ui import console, print_scenarios, thinking
 
-DEFAULT_MODEL = "groq/llama-3.3-70b-versatile"
+DEFAULT_MODEL = "groq/llama-3.1-8b-instant"  # Groq's free tier allows 14,400 req/day
+# on this model vs 1,000/day on the 70B version -- far less likely to hit a rate
+# limit while testing/comparing prompts, which is what this tool spends calls on.
 DEFAULT_JUDGE_CRITERIA = "Score 1-5 on accuracy, clarity, and completeness."
 
 # `quickstart` fixes the placeholder name so AI-generated test cases can be slotted
