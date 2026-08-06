@@ -38,6 +38,13 @@ def fake_llm_response(text: str):
     )
 
 
+def fake_ask(value):
+    """Mimics questionary's `.select(...).ask()` / `.text(...).ask()` chain
+    without touching a real console (which questionary needs and this
+    sandboxed test environment doesn't have)."""
+    return SimpleNamespace(ask=lambda: value)
+
+
 def test_build_parser_uses_plan_md_defaults():
     # In plain terms: if you don't pass any flags, the CLI should fall back to
     # the exact defaults written down in Plan.md, not something else.
@@ -239,10 +246,13 @@ def test_main_improve_reports_generation_failure_cleanly(monkeypatch, capsys):
     assert "model unavailable" in capsys.readouterr().err
 
 
-def test_main_with_no_args_defaults_to_improve(tmp_path, monkeypatch):
+def test_main_with_no_args_shows_menu_then_runs_the_picked_flow(tmp_path, monkeypatch):
+    # In plain terms: bare `prompteval` should show the arrow-key menu, and
+    # picking "improve" there should behave exactly like `prompteval improve`.
     canned_answers = ("Summarize: {input}", ["msg one", "msg two", "msg three"])
     generate_wizard = AsyncMock(return_value=canned_answers)
     monkeypatch.setattr(cli_module, "run_improve_wizard", generate_wizard)
+    monkeypatch.setattr(cli_module.questionary, "select", lambda *a, **k: fake_ask("improve"))
     feedback_json = '{"score": 4, "reasoning": "Solid.", "improved_prompt": "Summarize concisely: {input}"}'
     monkeypatch.setattr(litellm, "acompletion", AsyncMock(return_value=fake_llm_response(feedback_json)))
     monkeypatch.chdir(tmp_path)
@@ -254,11 +264,12 @@ def test_main_with_no_args_defaults_to_improve(tmp_path, monkeypatch):
     assert list(tmp_path.glob("Summarize_*_feedback_*.md"))
 
 
-def test_main_with_only_flags_defaults_to_improve_and_applies_them(tmp_path, monkeypatch):
+def test_main_with_only_flags_shows_menu_and_applies_them(tmp_path, monkeypatch):
     # In plain terms: `prompteval --judge-model X` (no subcommand) should still
-    # apply --judge-model, not silently ignore it.
+    # apply --judge-model to whatever gets picked from the menu, not lose it.
     canned_answers = ("Summarize: {input}", ["msg one", "msg two", "msg three"])
     monkeypatch.setattr(cli_module, "run_improve_wizard", AsyncMock(return_value=canned_answers))
+    monkeypatch.setattr(cli_module.questionary, "select", lambda *a, **k: fake_ask("improve"))
     feedback_json = '{"score": 4, "reasoning": "Solid.", "improved_prompt": "Summarize concisely: {input}"}'
     monkeypatch.setattr(litellm, "acompletion", AsyncMock(return_value=fake_llm_response(feedback_json)))
     monkeypatch.chdir(tmp_path)
@@ -278,3 +289,145 @@ def test_main_quickstart_reports_generation_failure_cleanly(monkeypatch, capsys)
 
     assert exit_code == 1
     assert "model unavailable" in capsys.readouterr().err
+
+
+# --- _run_interactive_menu -------------------------------------------------
+
+
+def test_menu_improve_choice_returns_improve_argv(monkeypatch):
+    monkeypatch.setattr(cli_module.questionary, "select", lambda *a, **k: fake_ask("improve"))
+
+    result = cli_module._run_interactive_menu(["--judge-model", "groq/x"])
+
+    assert result == ["improve", "--judge-model", "groq/x"]  # existing flags preserved
+
+
+def test_menu_quickstart_choice_returns_quickstart_argv(monkeypatch):
+    monkeypatch.setattr(cli_module.questionary, "select", lambda *a, **k: fake_ask("quickstart"))
+
+    result = cli_module._run_interactive_menu([])
+
+    assert result == ["quickstart"]
+
+
+def test_menu_run_choice_asks_for_a_file_path(monkeypatch):
+    monkeypatch.setattr(cli_module.questionary, "select", lambda *a, **k: fake_ask("run"))
+    monkeypatch.setattr(cli_module.questionary, "text", lambda *a, **k: fake_ask("my_input.json"))
+
+    result = cli_module._run_interactive_menu([])
+
+    assert result == ["run", "my_input.json"]
+
+
+def test_menu_run_choice_with_blank_path_loops_back_to_the_menu(monkeypatch):
+    # In plain terms: cancelling the file-path question shouldn't crash or run
+    # with no file -- it should just show the menu again.
+    selects = iter(["run", "improve"])
+    monkeypatch.setattr(cli_module.questionary, "select", lambda *a, **k: fake_ask(next(selects)))
+    monkeypatch.setattr(cli_module.questionary, "text", lambda *a, **k: fake_ask(""))
+
+    result = cli_module._run_interactive_menu([])
+
+    assert result == ["improve"]
+
+
+def test_menu_init_choice_with_blank_filename_uses_no_extra_arg(monkeypatch):
+    monkeypatch.setattr(cli_module.questionary, "select", lambda *a, **k: fake_ask("init"))
+    monkeypatch.setattr(cli_module.questionary, "text", lambda *a, **k: fake_ask(""))
+
+    result = cli_module._run_interactive_menu([])
+
+    assert result == ["init"]
+
+
+def test_menu_init_choice_with_a_filename_includes_it(monkeypatch):
+    monkeypatch.setattr(cli_module.questionary, "select", lambda *a, **k: fake_ask("init"))
+    monkeypatch.setattr(cli_module.questionary, "text", lambda *a, **k: fake_ask("saved.json"))
+
+    result = cli_module._run_interactive_menu([])
+
+    assert result == ["init", "saved.json"]
+
+
+def test_menu_help_choice_prints_help_then_loops_back(monkeypatch, capsys):
+    selects = iter(["help", "exit"])
+    monkeypatch.setattr(cli_module.questionary, "select", lambda *a, **k: fake_ask(next(selects)))
+
+    result = cli_module._run_interactive_menu([])
+
+    assert result is None
+    assert "NEW HERE?" in capsys.readouterr().out  # HELP_TEXT content
+
+
+def test_menu_exit_choice_returns_none(monkeypatch):
+    monkeypatch.setattr(cli_module.questionary, "select", lambda *a, **k: fake_ask("exit"))
+
+    assert cli_module._run_interactive_menu([]) is None
+
+
+def test_menu_ctrl_c_or_esc_is_treated_like_exit(monkeypatch):
+    # In plain terms: questionary reports Ctrl+C/Esc as None -- must not crash.
+    monkeypatch.setattr(cli_module.questionary, "select", lambda *a, **k: fake_ask(None))
+
+    assert cli_module._run_interactive_menu([]) is None
+
+
+def test_main_no_args_menu_exit_returns_cleanly(monkeypatch):
+    monkeypatch.setattr(cli_module.questionary, "select", lambda *a, **k: fake_ask("exit"))
+
+    assert main([]) == 0
+
+
+# --- fallback when the terminal can't render questionary's arrow-key menu --
+
+
+def test_ask_select_falls_back_to_a_numbered_menu_when_questionary_cannot_render(monkeypatch):
+    # In plain terms: some real terminals (Git Bash/mintty on Windows, confirmed
+    # via a live test) can't render the fancy menu at all and raise instead of
+    # just looking worse -- this proves the tool still works there.
+    def raise_no_console(*_a, **_k):
+        raise RuntimeError("No Windows console found.")
+
+    monkeypatch.setattr(cli_module.questionary, "select", raise_no_console)
+    monkeypatch.setattr("builtins.input", lambda _prompt="": "1")  # picks choice #1
+
+    result = cli_module._ask_select("Pick one", cli_module._MENU_CHOICES)
+
+    assert result == cli_module._MENU_CHOICES[0].value  # "improve"
+
+
+def test_ask_select_fallback_retries_on_an_invalid_number(monkeypatch):
+    def raise_no_console(*_a, **_k):
+        raise RuntimeError("no console")
+
+    monkeypatch.setattr(cli_module.questionary, "select", raise_no_console)
+    answers = iter(["not a number", "99", "2"])  # garbage, out of range, then valid
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
+
+    result = cli_module._ask_select("Pick one", cli_module._MENU_CHOICES)
+
+    assert result == cli_module._MENU_CHOICES[1].value  # "quickstart"
+
+
+def test_ask_text_falls_back_to_plain_input_when_questionary_cannot_render(monkeypatch):
+    def raise_no_console(*_a, **_k):
+        raise RuntimeError("no console")
+
+    monkeypatch.setattr(cli_module.questionary, "text", raise_no_console)
+    monkeypatch.setattr("builtins.input", lambda _prompt="": "my_answer.json")
+
+    result = cli_module._ask_text("File path:", default="fallback.json")
+
+    assert result == "my_answer.json"
+
+
+def test_ask_text_fallback_uses_default_on_blank_answer(monkeypatch):
+    def raise_no_console(*_a, **_k):
+        raise RuntimeError("no console")
+
+    monkeypatch.setattr(cli_module.questionary, "text", raise_no_console)
+    monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+
+    result = cli_module._ask_text("File path:", default="fallback.json")
+
+    assert result == "fallback.json"

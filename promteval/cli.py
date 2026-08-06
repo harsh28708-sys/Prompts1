@@ -9,6 +9,7 @@ import os
 import sys
 from pathlib import Path
 
+import questionary
 from dotenv import load_dotenv
 from pydantic import ValidationError
 
@@ -44,12 +45,16 @@ version of it, instead of guessing whether your wording is any good.
 NEW HERE? JUST RUN:
     prompteval
 
-It will ask for your prompt right there in the terminal, test it against a
-few realistic scenarios, and give you a score + a rewritten, better version.
+It shows a menu (arrow keys + Enter) so you can pick what to do without
+needing to know a command name.
 
 THE WAYS TO USE IT
-    prompteval                     Got ONE prompt and want it better? AI tests
-    (same as `prompteval improve`) it against a few realistic scenarios and
+    prompteval                     Shows an arrow-key menu of everything
+                                    below -- pick one instead of typing a
+                                    command name.
+
+    prompteval improve             Got ONE prompt and want it better? AI tests
+                                    it against a few realistic scenarios and
                                     gives you a score (1-5) plus a rewritten,
                                     improved version of your prompt.
 
@@ -196,6 +201,80 @@ async def run_pipeline(run: EvalRun, judge_model: str, concurrency: int, timeout
 _SUBCOMMANDS = {"run", "init", "quickstart", "improve"}
 _HELP_TOKENS = {"/help", "help", "-h", "--help"}
 
+_MENU_CHOICES = [
+    questionary.Choice("Improve one prompt (score + rewrite)", value="improve"),
+    questionary.Choice("Compare 3 prompts against AI-generated test data", value="quickstart"),
+    questionary.Choice("Build a reusable input file", value="init"),
+    questionary.Choice("Run an existing input file", value="run"),
+    questionary.Choice("Help", value="help"),
+    questionary.Choice("Exit", value="exit"),
+]
+
+
+def _fallback_select(question: str, choices: list) -> str | None:
+    """Plain numbered-list menu, read via input(). Used when questionary's
+    arrow-key menu can't render at all -- some terminals (e.g. Git Bash/mintty
+    on Windows) don't expose a real console screen buffer, which crashes
+    questionary outright rather than just looking worse."""
+    print(question)
+    for i, choice in enumerate(choices, start=1):
+        print(f"  {i}. {choice.title}")
+    answer = input("Enter a number: ").strip()
+    try:
+        index = int(answer) - 1
+        if 0 <= index < len(choices):
+            return choices[index].value
+    except ValueError:
+        pass
+    print("Not a valid choice -- try again.\n")
+    return _fallback_select(question, choices)
+
+
+def _ask_select(question: str, choices: list) -> str | None:
+    try:
+        return questionary.select(question, choices=choices).ask()
+    except Exception:  # noqa: BLE001 -- if the fancy menu can't render, fall back instead of crashing
+        return _fallback_select(question, choices)
+
+
+def _ask_text(question: str, default: str = "") -> str:
+    try:
+        return questionary.text(question, default=default).ask() or ""
+    except Exception:  # noqa: BLE001 -- same fallback reasoning as _ask_select
+        prompt = f"{question} [{default}]: " if default else f"{question}: "
+        return input(prompt).strip() or default
+
+
+def _run_interactive_menu(existing_argv: list[str]) -> list[str] | None:
+    """Shown when no subcommand is given (arrow keys, not typing a command name).
+    Returns the full argv to parse next (any flags already typed are preserved,
+    e.g. `prompteval --judge-model x` still applies whatever gets picked), or
+    None if the user chose to exit (or hit Ctrl+C/Esc, which questionary also
+    reports as None)."""
+    while True:
+        choice = _ask_select("What do you want to do?", _MENU_CHOICES)
+
+        if choice is None or choice == "exit":
+            return None
+
+        if choice == "help":
+            print(HELP_TEXT)
+            print()
+            continue
+
+        if choice == "run":
+            file_path = _ask_text("Path to your input file:", default="examples/sample_run.json")
+            if not file_path:  # blank/cancelled -- back to the menu rather than erroring
+                continue
+            return [choice, file_path, *existing_argv]
+
+        if choice == "init":
+            output_file = _ask_text("Save as (leave blank for an automatic name):")
+            extra = [output_file] if output_file else []
+            return [choice, *extra, *existing_argv]
+
+        return [choice, *existing_argv]
+
 
 def main(argv: list[str] | None = None) -> int:
     load_dotenv()
@@ -210,9 +289,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     # No subcommand (or flags with no subcommand, e.g. `prompteval --judge-model x`)
-    # defaults to improve -- `run`/`init`/`quickstart` still work exactly as before when given.
+    # shows an interactive menu instead of guessing -- `run`/`init`/`quickstart`/
+    # `improve` still work exactly as before when named explicitly.
     if not argv or argv[0] not in _SUBCOMMANDS:
-        argv = ["improve", *argv]
+        resolved = _run_interactive_menu(argv)
+        if resolved is None:
+            return 0
+        argv = resolved
     args = build_parser().parse_args(argv)
 
     if args.command in ("run", "quickstart", "improve") and not _has_any_api_key():

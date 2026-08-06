@@ -8,6 +8,7 @@ dependencies = [
     "litellm",
     "python-dotenv",
     "tenacity",
+    "questionary",
 ]
 
 [project.optional-dependencies]

@@ -24,8 +24,8 @@ This installs the `prompteval` command into your virtual environment, along with
 
 **Don't want to activate the venv every time?** Two options:
 - Double-click **`Run PromtEval.cmd`** (Windows) — a literal run button. Opens a
-  window, runs `improve` (asks for one prompt, gives a score + rewrite), and
-  stays open afterward so you can read the results.
+  window with the interactive menu (below), and stays open afterward so you can
+  read the results.
 - Or run `.\prompteval.cmd <command>` from a terminal in this folder (e.g.
   `.\prompteval.cmd run examples/sample_run.json`) — same idea, but lets you pass
   any command/flags, for when you're already in a terminal.
@@ -56,6 +56,32 @@ you don't need all three. Get keys at:
 - Gemini: [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
 
 `.env` is git-ignored — your keys never get committed.
+
+## The interactive menu
+
+Just run `prompteval` (or double-click `Run PromtEval.cmd`) with no arguments and
+you'll see an arrow-key menu instead of needing to know a command name:
+
+```
+? What do you want to do?
+❯ Improve one prompt (score + rewrite)
+  Compare 3 prompts against AI-generated test data
+  Build a reusable input file
+  Run an existing input file
+  Help
+  Exit
+```
+
+Use ↑/↓ and Enter to pick. Any flags you already typed still apply to whatever you
+pick, e.g. `prompteval --judge-model groq/llama-3.3-70b-versatile` shows the menu
+and applies that flag to whichever option you choose.
+
+> Some terminals (Git Bash/mintty on Windows in particular) can't render the
+> arrow-key menu at all — it automatically falls back to a plain numbered list
+> in that case, so it still works, just without arrow keys.
+
+Every command below still works directly too (`prompteval improve`, `prompteval
+run <file>`, etc.) if you'd rather skip the menu and type the command by name.
 
 ## Input file format
 
